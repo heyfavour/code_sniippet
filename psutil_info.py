@@ -1,0 +1,17 @@
+import psutil
+cpu_info = {
+    'cpu_count': psutil.cpu_count(logical=False),#物理核数
+    'cpu_percent': psutil.cpu_percent(interval=0.1),#cpu使用率
+    'pids': len(psutil.pids()),#进程数
+    'cpu_freq': psutil.cpu_freq(),#CPU频率
+    'boot_time': psutil.boot_time()/(60*60*60*24),#系统启动时间
+}
+print(cpu_info)
+memory_info = psutil.virtual_memory()
+memory_info = {
+    "total":memory_info.total/(1024*1024*1024),
+    "used":memory_info.used/(1024*1024*1024),
+    "free":memory_info.free/(1024*1024*1024),
+    "percent":memory_info.percent,
+}
+
