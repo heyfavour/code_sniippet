@@ -18,6 +18,6 @@ def dfs_showdir(path, depth):
 
 
 if __name__ == '__main__':
-    #path = r'C:\Users\Mr.Wang\Desktop\myfile\vue-element-admin-fastapi'
+    path = r'C:\Users\Mr.Wang\Desktop\myfile\vue-element-admin-fastapi'
     dfs_showdir(path, 0)
 
