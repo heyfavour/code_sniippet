@@ -1,5 +1,6 @@
 """
 创办企业微信后，推送信息
+https://github.com/easychen/wecomchan
 """
 import json, requests
 
