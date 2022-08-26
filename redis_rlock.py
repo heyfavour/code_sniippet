@@ -1,6 +1,6 @@
 import asyncio
-import datetime
 import threading
+import time
 import uuid
 import async_timeout
 from types import SimpleNamespace
@@ -138,6 +138,8 @@ class RLock:
             token = token
         elif self.token:
             token = self.token
+        elif self.local.token:
+            token = self.local.token
         else:
             token = uuid.uuid1().hex
         if blocking is None: blocking = self.blocking
@@ -224,7 +226,7 @@ async def demo():
     key = "cust_no:product_no"
     token = str(uuid.uuid1())
     print(key, token)
-    lock = RLock(redis, key, token, expiration=1000)
+    lock = RLock(redis, key, expiration=1000)
     _lock1 = await lock.acquire(blocking=True, blocking_timeout=3)
     print(_lock1, await redis.hgetall(key))
     _lock2 = await lock.acquire(blocking=True, blocking_timeout=3)
@@ -239,7 +241,15 @@ async def demo():
     print("ttl",await redis.pttl(key))
     _release2 = await lock.release()
     print(_release1, await redis.hgetall(key))
-
+    time.sleep(2)
+    _lock1 = await lock.acquire(blocking=True, blocking_timeout=20)
+    print(_lock1, await redis.hgetall(key))
+    _release1 = await lock.release()
+    print(_release1, await redis.hgetall(key))
+    _lock1 = await lock.acquire(blocking=True, blocking_timeout=3)
+    print(_lock1, await redis.hgetall(key))
+    _release1 = await lock.release()
+    print(_release1, await redis.hgetall(key))
 
 if __name__ == '__main__':
     asyncio.run(demo())
