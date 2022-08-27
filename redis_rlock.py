@@ -226,7 +226,7 @@ async def demo():
     key = "cust_no:product_no"
     token = str(uuid.uuid1())
     print(key, token)
-    lock = RLock(redis, key, expiration=1000)
+    lock = RLock(redis, key,token, expiration=1000)
     _lock1 = await lock.acquire(blocking=True, blocking_timeout=3)
     print(_lock1, await redis.hgetall(key))
     _lock2 = await lock.acquire(blocking=True, blocking_timeout=3)
@@ -234,6 +234,7 @@ async def demo():
     await asyncio.sleep(5)
     print("sleep", await redis.hgetall(key))
     _release1 = await lock.release()
+    print(type(_release1))
     print(_release1, await redis.hgetall(key))
     await asyncio.sleep(5)
     print("ttl",await redis.pttl(key))
