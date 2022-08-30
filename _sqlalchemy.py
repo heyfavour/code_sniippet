@@ -22,3 +22,5 @@ oracle 默认RC
 db2 默认cs [ur 读未提交|cs 读取行加锁|rs结果集加锁|rr可重复读]
 """
 db.expunge(object)#释放实例  SQLAlchemy有个特点，当你的session会话结束以后，它会销毁你插入的这种临时数据，你再想访问这个data就访问不了了。所以我们可以释放这个数据
+
+db.query(Object).populate_existing().filter(id=5).first()#忽略缓存重新取数
