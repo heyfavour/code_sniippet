@@ -130,7 +130,7 @@ class Crypto(object):
         signature = self.PRI_KEY.sign(
             data,
             asymmetric.padding.PSS(
-                mgf=asymmetric.padding.MGF1(hashes.SHA256()),
+                mgf=asymmetric.padding.MGF1(self.hash_type),
                 salt_length=asymmetric.padding.PSS.MAX_LENGTH
             ),
             self.hash_type,
@@ -138,9 +138,8 @@ class Crypto(object):
         return base64.b64encode(signature).decode()
 
     def verify(self, data: Union[bytes, str], signature: [bytes, str]):
-        if isinstance(data, str): data = base64.b64decode(data)
-        if isinstance(signature, str): signature = base64.b64decode(signature)
-        print(data,signature)
+        if isinstance(data, str): data = bytes(data, encoding=self.CHARSET)
+        if isinstance(signature, str): signature = bytes(signature, encoding=self.CHARSET)
         self.PUB_KEY.verify(
             signature,
             data,
@@ -172,7 +171,7 @@ if __name__ == '__main__':
     data = json.dumps({"name": "test"})
     crypt = Crypto()
     aes_data, rsa_key, signature = crypt.encrypt(data)
-    print(aes_data)
-    print(rsa_key)
-    print(signature)
+    # print(aes_data)
+    # print(rsa_key)
+    # print(signature)
     crypt.decrypt(aes_data, rsa_key, signature)
