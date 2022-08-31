@@ -135,11 +135,12 @@ class Crypto(object):
             ),
             self.hash_type,
         )
-        return base64.b64encode(signature).decode()
+        # return base64.b64encode(signature).decode()
+        return signature
 
     def verify(self, data: Union[bytes, str], signature: [bytes, str]):
         if isinstance(data, str): data = bytes(data, encoding=self.CHARSET)
-        if isinstance(signature, str): signature = bytes(signature, encoding=self.CHARSET)
+        if isinstance(signature, str): signature = base64.b64encode(signature)
         try:
             self.PUB_KEY.verify(
                 signature,
@@ -166,7 +167,7 @@ class Crypto(object):
         key = self.rsa_decrypt(rsa_key)
         data = self.aes_decrypt(aes_data, key)
         verify = self.verify(data, signature)
-        # return data,verify
+        return data, verify
 
 
 if __name__ == '__main__':
@@ -175,7 +176,5 @@ if __name__ == '__main__':
     data = json.dumps({"name": "test"})
     crypt = Crypto()
     aes_data, rsa_key, signature = crypt.encrypt(data)
-    # print(aes_data)
-    # print(rsa_key)
-    # print(signature)
-    crypt.decrypt(aes_data, rsa_key, signature)
+    data, verify = crypt.decrypt(aes_data, rsa_key, signature)
+    print(data,verify)
