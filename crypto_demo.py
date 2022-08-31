@@ -140,15 +140,19 @@ class Crypto(object):
     def verify(self, data: Union[bytes, str], signature: [bytes, str]):
         if isinstance(data, str): data = bytes(data, encoding=self.CHARSET)
         if isinstance(signature, str): signature = bytes(signature, encoding=self.CHARSET)
-        self.PUB_KEY.verify(
-            signature,
-            data,
-            asymmetric.padding.PSS(
-                mgf=asymmetric.padding.MGF1(self.hash_type, ),
-                salt_length=asymmetric.padding.PSS.MAX_LENGTH
-            ),
-            self.hash_type,
-        )
+        try:
+            self.PUB_KEY.verify(
+                signature,
+                data,
+                asymmetric.padding.PSS(
+                    mgf=asymmetric.padding.MGF1(self.hash_type, ),
+                    salt_length=asymmetric.padding.PSS.MAX_LENGTH
+                ),
+                self.hash_type,
+            )
+            return True
+        except InvalidSignature:
+            return False
 
     def encrypt(self, data):
         aes_key = self.random_key()  # random_keu
