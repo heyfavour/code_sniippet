@@ -10,6 +10,12 @@
     进阶版CBC
 5.输出反馈模式(Output FeedBack (OFB))
     进阶版CFB
+
+padding
+RSA:
+pkcs1(最基本)----pkcs5(对密钥加密)----pkcs8(在以上基础上安全存储移植等)
+证书：
+pkcs7(基本语法)----pkcs12(安全传输)
 """
 import threading
 import base64
@@ -22,7 +28,6 @@ from cryptography.hazmat.backends import default_backend
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives import hashes, asymmetric
-from cryptography.hazmat.primitives.asymmetric import utils
 from cryptography.exceptions import InvalidSignature
 
 # len(IV) = 16
@@ -76,7 +81,35 @@ class Crypto(object):
         with open("f{pub_key_path}}", "rb") as pub_key:
             self.PUB_KEY = serialization.load_pem_public_key(key_file.read(),backend = default_backend())
         """
-        self.hash_type = hashes.SHA1()  # hashes.SHA256()
+
+        self.rsa_crypt_padding_type = "PKCS1V15"
+        self.rsa_sign_padding_type = "PKCS1V15"
+        self.sign_hash = hashes.SHA1()
+
+    @property
+    def rsa_crypt_padding_dict(self):
+        # PKCS1V15 = 固定位 + 随机数 + 明文消息
+        # OAEP = 原文Hash + 随机数 + 分隔符 + 原文 #PKCS1V20
+        _dict = {
+            "PKCS1V15": asymmetric.padding.PKCS1v15(),
+            "OAEP": asymmetric.padding.OAEP(
+                mgf=asymmetric.padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            ),
+        }
+        return _dict
+
+    @property
+    def rsa_sign_padding_dict(self):
+        _dict = {
+            "PKCS1V15": asymmetric.padding.PKCS1v15(),
+            "PSS": asymmetric.padding.PSS(
+                mgf=asymmetric.padding.MGF1(hashes.SHA256()),
+                salt_length=asymmetric.padding.PSS.MAX_LENGTH
+            ),
+        }
+        return _dict
 
     def random_key(self):
         key = "".join([str(random.randint(0, 9)) for _ in range(16)])
@@ -101,62 +134,42 @@ class Crypto(object):
         decrypt_data = unpadder.update(unpdding_data) + unpadder.finalize()
         return decrypt_data.decode(self.CHARSET)
 
+    @property
+    def _rsa_padding(self):
+        return self.rsa_crypt_padding_dict[self.rsa_crypt_padding_type]
+
     def rsa_encrypt(self, aes_key: str):
-        encrypted_data = self.PUB_KEY.encrypt(
-            aes_key.encode(),
-            asymmetric.padding.OAEP(
-                mgf=asymmetric.padding.MGF1(algorithm=self.hash_type),
-                algorithm=self.hash_type,
-                label=None
-            ),
-        )
+        encrypted_data = self.PUB_KEY.encrypt(aes_key.encode(), self._rsa_padding)
         # RSA加密出来是base64decode,需要转码
         return base64.b64encode(encrypted_data).decode()
 
     def rsa_decrypt(self, encrypted_data: Union[bytes, str]):
         if isinstance(encrypted_data, str): encrypted_data = base64.b64decode(encrypted_data)
-        decrypted_data = self.PRI_KEY.decrypt(
-            encrypted_data,
-            asymmetric.padding.OAEP(
-                mgf=asymmetric.padding.MGF1(algorithm=self.hash_type),
-                algorithm=self.hash_type,
-                label=None
-            )
-        )
+        decrypted_data = self.PRI_KEY.decrypt(encrypted_data, self._rsa_padding)
         return decrypted_data.decode()
 
+    @property
+    def _rsa_sign_padding(self):
+        return self.rsa_sign_padding_dict[self.rsa_sign_padding_type]
+
     def sign(self, data: Union[bytes, str]):
+        # 主流的RSA签名包括 RSA-PSS RSA-PKCS1v15
+        # PSS更安全
         if isinstance(data, str): data = bytes(data, encoding=self.CHARSET)
-        signature = self.PRI_KEY.sign(
-            data,
-            asymmetric.padding.PSS(
-                mgf=asymmetric.padding.MGF1(self.hash_type),
-                salt_length=asymmetric.padding.PSS.MAX_LENGTH
-            ),
-            self.hash_type,
-        )
+        signature = self.PRI_KEY.sign(data, self._rsa_sign_padding, self.sign_hash)
         return base64.b64encode(signature).decode()
 
     def verify(self, data: Union[bytes, str], signature: [bytes, str]):
         if isinstance(data, str): data = bytes(data, encoding=self.CHARSET)
         if isinstance(signature, str): signature = base64.b64decode(signature.encode())
         try:
-            self.PUB_KEY.verify(
-                signature,
-                data,
-                asymmetric.padding.PSS(
-                    mgf=asymmetric.padding.MGF1(self.hash_type, ),
-                    salt_length=asymmetric.padding.PSS.MAX_LENGTH
-                ),
-                self.hash_type,
-            )
+            self.PUB_KEY.verify(signature, data, self._rsa_sign_padding, self.sign_hash)
             return True
         except InvalidSignature:
             return False
 
     def encrypt(self, data):
         aes_key = self.random_key()  # random_keu
-        ase_key = "0"*16
         aes_data = self.aes_encrypt(data, aes_key)  # AES data->aes_data
         # data = self.aes_decrypt(aes_data, aes_key)
         rsa_key = self.rsa_encrypt(aes_key)  # pub_prim SHA1withRSA aes_key->rsa_key
@@ -177,4 +190,4 @@ if __name__ == '__main__':
     crypt = Crypto()
     aes_data, rsa_key, signature = crypt.encrypt(data)
     data, verify = crypt.decrypt(aes_data, rsa_key, signature)
-    print(data,verify)
+    print(data, verify)
