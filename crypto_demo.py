@@ -29,28 +29,28 @@ from cryptography.exceptions import InvalidSignature
 IV = "8b991e525526bc73"
 PRI_KEY = """
 -----BEGIN PRIVATE KEY-----
-MIICdwIBADANBgkqhkiG9w0BAQEFAASCAmEwggJdAgEAAoGBAKHMbCrnTmHSnjvH
-8P9vuy8vv5HNgZsbP6ur0dx823cnDEIjZgfsFaUeV/eaZXIi60IzI6eqigzA4LJX
-RLkKG57biGQDvrnNJHuTTAkRSSbfwdxnpoQPWDcNHTUqGTcNYxYkB4YOYLOgVsmq
-uFjq9C7hjIxjoSOwNwJ32p0nTssRAgMBAAECgYBhYd100TVPEWplhsjZpVEfbHi7
-89nfFj5zP/4W3BtnktwA7rdZa1H3yNSfVZFbagL5HDiIkM94L5rOHFJjoN7QACt7
-6PnJj7y2UZnPMtYGl9tPt++arHdEqsx2Z/NYr2WPzaAgPpvltWf1oC4EF1HWKWVo
-kBUXgShykInusgpBtQJBANIFJSoiN5wd3YIVPv00kUs6Fq+wGnMG+ypLIAc1952v
-bAg8VqSSTuT0/XqJGanxR0yGvoPaJpqvoF8WhQ2INxcCQQDFOKKoU/CYyXfEdjzF
-3GJZN+o/3ltBEU5bNCcB14rH7rQC3ABz+adynHr9hOGr98O6xYbqTMb0mUCJasN6
-I+gXAkEAr9ihAoM93phe9GEHqYhPMxaDEj04GCG7QPE/8umr1zqfENI8lXTvW+MJ
-LYUHmPQth5S2hb2tXw04EQXRB8CKpwJBAMJ6C6NzSnBPUoPvmBQAMxcJVTvv1wp9
-t0emUMS3OAnZL7cWHHhAecdB2OH/080Q//g/6b9HQHVYXdRj7CiYGbcCQDHNvzox
-ddVJFwyMpMuHztqCGGqm6pKaCvBlpoirY3Cj0KLN+yQnz/c4jIgi0q463RbJPKnu
-6TNr8rbLPX2of6U=
+MIICdgIBADANBgkqhkiG9w0BAQEFAASCAmAwggJcAgEAAoGBAMlLYcRK6Q0XMszy
+GbNyiuGWxrfcXPUhUc5caRjMQF4hSf2uWdJ91xS9j3h3kg4ciYw53IvOu2MXh0/p
+ycs3eVcoOv829X577r1eTZR6Z+3PM21ZH5LfJtuYE9BUW0kqR8VGCU/UjzaoRIoj
+zm9bdt1vsFuBrrYK2AcQQgHgsxGLAgMBAAECgYBIPm7DRWNpGFdaKNXCiqx/lF6T
+pFoUfDXhC1eI192OKwJkMov4OMPVpMb2JGvd9q4DDs0xvCuSv+IHc0/CSJGabFrK
+RBSQMgfnduLSytIzHvrdmq4YN0txglP2JWulT4WrS7j5RGCNOSc0LkBQDpz+4Q7v
+Bvzl5GU2CANKpeBUWQJBAOOSU6/w1E8H2GMJF90RDiIRH0pGKUveyje0W0O4Utzf
+HN6QRblaB2RXq2hcwPQug9mE1R6yGPo9aQj2GQfZ2Z8CQQDicLhW04KVj3Kozttw
+XgDZM/lXvfFN2JNPkuwLJHjzZjX/1V4dfs7ADSiu7BbKqbCrA8PhqkoBtrQ347uO
+r5iVAkB2hwIbgx2xQ+7KNjQ9qeJoj+5yKvTbVWCRftiB/wD5lSNeMFqAXYm4E4lt
+Q9Ij3A5EPtEZub0UqOOKDVOgKTEVAkEAur9dt/XN70yTslaPMVfFeVxc2hkDRkFE
+FE9GLlZRDeOQy0IL0WWAW3E+ySxaC5/w3MlJJfZL/KfSb3l4eE+nFQJAOPAV2MPR
+CT2KPWFXUYwQV6tgPYSqBpTJp5Averfobc2LqNgCUGwghJaB2/76pQISkYD/Emvb
+9PLmxpoxxzT+nQ==
 -----END PRIVATE KEY-----
 """
 PUB_KEY = """
 -----BEGIN PUBLIC KEY-----
-MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQChzGwq505h0p47x/D/b7svL7+R
-zYGbGz+rq9HcfNt3JwxCI2YH7BWlHlf3mmVyIutCMyOnqooMwOCyV0S5Chue24hk
-A765zSR7k0wJEUkm38HcZ6aED1g3DR01Khk3DWMWJAeGDmCzoFbJqrhY6vQu4YyM
-Y6EjsDcCd9qdJ07LEQIDAQAB
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDJS2HESukNFzLM8hmzcorhlsa3
+3Fz1IVHOXGkYzEBeIUn9rlnSfdcUvY94d5IOHImMOdyLzrtjF4dP6cnLN3lXKDr/
+NvV+e+69Xk2UemftzzNtWR+S3ybbmBPQVFtJKkfFRglP1I82qESKI85vW3bdb7Bb
+ga62CtgHEEIB4LMRiwIDAQAB
 -----END PUBLIC KEY-----
 """
 
@@ -135,12 +135,11 @@ class Crypto(object):
             ),
             self.hash_type,
         )
-        # return base64.b64encode(signature).decode()
-        return signature
+        return base64.b64encode(signature).decode()
 
     def verify(self, data: Union[bytes, str], signature: [bytes, str]):
         if isinstance(data, str): data = bytes(data, encoding=self.CHARSET)
-        if isinstance(signature, str): signature = base64.b64encode(signature)
+        if isinstance(signature, str): signature = base64.b64decode(signature.encode())
         try:
             self.PUB_KEY.verify(
                 signature,
@@ -157,6 +156,7 @@ class Crypto(object):
 
     def encrypt(self, data):
         aes_key = self.random_key()  # random_keu
+        ase_key = "0"*16
         aes_data = self.aes_encrypt(data, aes_key)  # AES data->aes_data
         # data = self.aes_decrypt(aes_data, aes_key)
         rsa_key = self.rsa_encrypt(aes_key)  # pub_prim SHA1withRSA aes_key->rsa_key
