@@ -61,16 +61,22 @@ ga62CtgHEEIB4LMRiwIDAQAB
 
 
 class Crypto(object):
-    _instance_lock = threading.Lock()
+    # _instance_lock = threading.Lock()
+    #
+    # def __new__(cls, *args, **kwargs):
+    #     if not hasattr(cls, "_instance"):
+    #         with cls._instance_lock:
+    #             if not hasattr(cls, "_instance"):
+    #                 cls._instance = super().__new__(cls)
+    #     return cls._instance
 
-    def __new__(cls, *args, **kwargs):
-        if not hasattr(cls, "_instance"):
-            with cls._instance_lock:
-                if not hasattr(cls, "_instance"):
-                    cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def __init__(self):
+    def __init__(self,
+                 PRI_KEY=None,
+                 PUB_KEY=None,
+                 rsa_crypt_padding_type="PKCS1V15",
+                 rsa_sign_padding_type="PKCS1V15",
+                 sign_hash=hashes.SHA1(),
+                 ):
         self.CHARSET = 'utf-8'
         self.iv = IV
         self.PRI_KEY = serialization.load_pem_private_key(PRI_KEY.encode(), password=None, backend=default_backend())
@@ -82,9 +88,9 @@ class Crypto(object):
             self.PUB_KEY = serialization.load_pem_public_key(key_file.read(),backend = default_backend())
         """
 
-        self.rsa_crypt_padding_type = "PKCS1V15"
-        self.rsa_sign_padding_type = "PKCS1V15"
-        self.sign_hash = hashes.SHA1()
+        self.rsa_crypt_padding_type = rsa_crypt_padding_type
+        self.rsa_sign_padding_type = rsa_sign_padding_type
+        self.sign_hash = sign_hash
 
     @property
     def rsa_crypt_padding_dict(self):
@@ -182,12 +188,26 @@ class Crypto(object):
         verify = self.verify(data, signature)
         return data, verify
 
+#改善 多渠道时 渠道单例
+class Channel_A(Crypto):
+    _instance_lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        if not hasattr(cls, "_instance"):
+            with cls._instance_lock:
+                if not hasattr(cls, "_instance"):
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        super().__init__(PRI_KEY, PUB_KEY, "PKCS1V15", "PKCS1V15")
+
 
 if __name__ == '__main__':
     import json
 
     data = json.dumps({"name": "test"})
-    crypt = Crypto()
+    crypt = Channel_A()
     aes_data, rsa_key, signature = crypt.encrypt(data)
     data, verify = crypt.decrypt(aes_data, rsa_key, signature)
     print(data, verify)
