@@ -1,9 +1,10 @@
 import asyncio
 import datetime
+from rate_limit import limits, sleep_and_retry
 
 
 async def time_func(item):
-    await asyncio.sleep(3)
+    await asyncio.sleep(1)
 
 
 class AsyncPool():
@@ -19,6 +20,8 @@ class AsyncPool():
         async with self.sema:
             await self.deal_item(item)
 
+    @sleep_and_retry
+    @limits(calls=4, period=1)
     async def deal_item(self, item):
         print(item, "deal start", datetime.datetime.now())
         await time_func(item)
@@ -29,7 +32,7 @@ def async_pool():
     pool = AsyncPool()
     items = pool.get_deal_list()
     task = [pool.sema_lock_deal(i) for i in items]
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
     loop.run_until_complete(asyncio.wait(task))
 
 
