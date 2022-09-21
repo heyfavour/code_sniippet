@@ -23,6 +23,7 @@ def producer():
     con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
     connection = pika.BlockingConnection(con_para)
     # 2.创建channel
+
     channel = connection.channel()
     # 3. 创建队列，queue_declare可以使用任意次数，
     # 如果指定的queue不存在，则会创建一个queue，如果已经存在，
@@ -34,14 +35,20 @@ def producer():
     # 它允许我们精确的指定发送给哪个队列(routing_key=''),
     # 参数body值发送的数据
     data = {"id": 1, "status": "成功"}
+    channel.confirm_delivery()  # 发布确认
     # channel.basic_publish(exchange='', routing_key=QUEUE_NAME, body=json.dumps(data, ensure_ascii=False))
-    channel.basic_publish(
-        exchange='',
-        routing_key=QUEUE_NAME,
-        body=json.dumps(data, ensure_ascii=False),
-        properties=pika.BasicProperties(delivery_mode=2),  # delivery_mode = 2 声明消息在队列中持久化 delivery_mod = 1 消息非持久化
-    )
-    print("已经发送了消息")
+    # Send a message
+    try:
+        channel.basic_publish(
+            exchange='',
+            routing_key=QUEUE_NAME,
+            body=json.dumps(data, ensure_ascii=False),
+            properties=pika.BasicProperties(delivery_mode=pika.DeliveryMode.Persistent),
+            # Persistent = 2 声明消息在队列中持久化 Transient = 1 消息非持久化
+        )
+        print('Message publish was confirmed')
+    except Exception as e:
+        print('Message could not be confirmed')
     # 程序退出前，确保刷新网络缓冲以及消息发送给rabbitmq，需要关闭本次连接
     connection.close()
 
@@ -136,7 +143,7 @@ def consumer2():  # auto_ack=False
 
 
 if __name__ == '__main__':
-    for i in range(100):producer()
+    for i in range(100): producer()
     procs = []
     # for _ in range(5):
     #     proc = Process(target=consumer)

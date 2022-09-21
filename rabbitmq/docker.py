@@ -6,7 +6,10 @@ docker run -d --hostname my-rabbit --name rabbit -p 15672:15672 -p 5673:5672 rab
 docker ps -a
 docker exec -it 容器id /bin/bash
 rabbitmq-plugins enable rabbitmq_management
+cd  /etc/rabbitmq/conf.d/
+echo management_agent.disable_metrics_collector = false > management_agent.disable_metrics_collector.conf
 http://ip:15672
+
 
 rabbitmqctl add_user admin admin
 rabbitmqctl set_user_tags username admin
