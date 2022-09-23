@@ -141,6 +141,7 @@ def consumer2():  # auto_ack=False
 if __name__ == '__main__':
     """
     发布订阅  持久化是queue的能力 exchange只负责转发给queue 如果exchange转发的时候没有queue订阅，则丢弃报文
+             路由键在 fanout 类型的交换机中不起作用
              因此可以1.consumer先订阅 producer再生产
                         channel.queue_declare(queue='', exclusive=True)
                         consumer_p1 = Process(target=consumer1)
