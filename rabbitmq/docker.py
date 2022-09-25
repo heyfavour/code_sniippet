@@ -66,3 +66,67 @@ rabbitmqctl set_permissions -p /product product ".*" ".*" ".*"
 
 rabbitmqctl set_user_tags product None
 """
+
+#集群
+"""
+docker network create --driver bridge --subnet 192.168.0.0/16 --gateway 192.168.0.1 rabbitmq_net
+docker run -d --hostname rabbitmq_1 --name rabbitmq_1 --net rabbitmq_net -p 50008:15672 -p 50009:5672 rabbitmq
+docker run -d --hostname rabbitmq_2 --name rabbitmq_2 --net rabbitmq_net -p 50006:15672 -p 50007:5672 rabbitmq
+docker exec -it rabbitmq_1 /bin/bash
+rabbitmq-plugins enable rabbitmq_management
+rabbitmqctl add_user admin admin
+rabbitmqctl set_user_tags admin administrator
+rabbitmqctl set_permissions -p / admin " " " " " "
+
+docker cp container_id:/var/lib/rabbitmq/.erlang.cookie erlang.cookie
+docker cp erlang.cookie container_id:/var/lib/rabbitmq/.erlang.cookie erlang.cookie
+docker restart container_id container_id container_id
+/etc/hosts 修改 不能用ip
+
+docker restart rabbitmq_1 rabbitmq_2
+#集群2
+docker exec -it rabbitmq_1  bash -c 'rabbitmq-server -detached'#重启erlant+rabbitmq
+rabbitmqctl stop_app#只关闭rabbitmq
+rabbitmq reset
+rabbitmqctl join_cluster rabbit@rabbitmq_1
+abbitmqctl start_app
+rabbitmqctl cluster_status
+
+镜像队列
+name:mirror
+pattern:^mirror
+applyto:exchanges and queues
+priority:
+definition: HA mode = exeactly      string#备份模式
+            HA-params = 2           number#备份两份
+            HA-sync-mode=antomatic  string#自动备份
+rabbitmqctl set_policy ha-all "^" '{"ha-mode":"exactly","ha-params":2,"ha-sync-mode":"automatic"}'
+
+Definition: 镜像定义，包括三个部分ha-sync-mode、ha-mode、ha-params。
+
+            ha-mode: 指明镜像队列的模式，有效取值范围为all/exactly/nodes。
+            all：表示在集群所有的代理上进行镜像。
+            exactly：表示在指定个数的代理上进行镜像，代理的个数由ha-params指定。
+            nodes：表示在指定的代理上进行镜像，代理名称通过ha-params指定。
+            ha-params: ha-mode模式需要用到的参数。
+            ha-sync-mode: 表示镜像队列中消息的同步方式，有效取值范围为：automatic，manually。
+            automatic：表示自动向master同步数据。
+            manually：表示手动向master同步数据
+            
+clear_policy -p / ha-all
+
+解除集群
+rabbitmqctl stop_app
+rabbitmqctl reset
+rabbitmqctl start_app
+rabbitmqctl cluster_status
+master:rabbitmq forget_cluster_node rabbit@rabbitmq_2
+"""
+#仲裁队列
+"""
+"""
+#联邦队列 federation exchange
+"""
+rabbitmq-plugins entable rabbitmq_federation
+rabbitmq-plugins entable rabbitmq_federation_management
+"""
