@@ -33,6 +33,7 @@ async def two(i):
 
 async def one(i):
     # lock = contextvars.ContextVar("lock")
+    print(lock.get())
     lock.set(i)
     await two(i)
     for i in range(100):
@@ -42,11 +43,11 @@ async def one(i):
 
 async def async_run():
     global lock
-    lock = contextvars.ContextVar("lock")
+    lock = contextvars.ContextVar("lock",default="")
     tasks = [one(i) for i in range(5)]
     await asyncio.gather(*tasks)
 
 
 if __name__ == '__main__':
-    threading_run()
-    #asyncio.run(async_run())
+    #threading_run()
+    asyncio.run(async_run())
