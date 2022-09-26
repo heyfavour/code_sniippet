@@ -1,3 +1,4 @@
+import random
 import threading
 import contextvars, asyncio
 
@@ -5,11 +6,10 @@ import contextvars, asyncio
 def thread_run_next():
     for i in range(100):
         local.num = local.num + 1
-    print(local.num)
 
 
 def thread_run():
-    local.num = 1
+    local.num = random.randint(1,10)
     for i in range(100):
         local.num = local.num + 1
     thread_run_next()
@@ -49,4 +49,4 @@ async def async_run():
 
 if __name__ == '__main__':
     threading_run()
-    asyncio.run(async_run())
+    #asyncio.run(async_run())
