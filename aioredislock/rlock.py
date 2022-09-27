@@ -24,7 +24,7 @@ class SimpleToken:
 
 class RLock:
     """
-    可重入锁 通过发布订阅解除 block wait
+    可重入锁 通过重试轮询acquire
     """
     lua_release = None
     lua_extend = None
