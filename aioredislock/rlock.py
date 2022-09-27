@@ -1,5 +1,4 @@
 import asyncio
-import datetime
 import uuid
 import async_timeout
 import contextvars
