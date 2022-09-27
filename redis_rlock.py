@@ -177,10 +177,12 @@ class RLock:
         pubsub = self.redis.pubsub()
         await pubsub.subscribe(self.channel)
         try:
+            start_time = datetime.datetime.now()
             async with async_timeout.timeout(blocking_timeout):
                 while True:
-                    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=blocking_timeout)
-                    logger.info(f"{str(message)},{blocking_timeout}")
+                    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=blocking_timeout-0.1)
+                    end_time = datetime.datetime.now()
+                    logger.info(f"{str(message)},{blocking_timeout}==={end_time-start_time}")
                     if message is not None: break
         except asyncio.TimeoutError:
             pass
@@ -253,11 +255,11 @@ logger = logging.getLogger(__name__)
 async def lock2_func(redis,key,i):
     lock2 = RLock(redis, key, expiration=30)
     _lock2 = await lock2.acquire(blocking=True, blocking_timeout=3)
-    logger.info(f"[{i}] {key} {_lock2} {await redis.hgetall(key)}")
+    logger.info(f"[{i}] {key} {_lock2} {await redis.hgetall(key)} 第二次获取锁")
     await asyncio.sleep(3)
-    logger.info(f"[{i}] sleep ---> key:{await redis.hgetall(key)}")
+    logger.info(f"[{i}] sleep ---> key:{await redis.hgetall(key)} 第二次锁后sleep")
     _release2 = await lock2.release()
-    logger.info(f"[{i}] {key}_release2:{_release2} {await redis.hgetall(key)}")
+    logger.info(f"[{i}] {key}_release2:{_release2} {await redis.hgetall(key)} 释放第二次锁")
 
 async def demo(i):
     import aioredis
@@ -268,15 +270,15 @@ async def demo(i):
     try:
         lock1 = RLock(redis, key,token, expiration=30)
         _lock1 = await lock1.acquire(blocking=True, blocking_timeout=3)
-        logger.info(f"[{i}] {key} {_lock1} {await redis.hgetall(key)}")
+        logger.info(f"[{i}] {key} {_lock1} {await redis.hgetall(key)} 第一次获取锁")
         await lock2_func(redis,key,i)
         await asyncio.sleep(3)
-        logger.info(f"[{i}] key{key} ttl:{await redis.pttl(key)}")
+        logger.info(f"[{i}] key{key} ttl:{await redis.pttl(key)} 查看剩余时间")
         await lock1.extend(10)#
-        logger.info(f"[{i}] key{key} ttl:{await redis.pttl(key)}")
+        logger.info(f"[{i}] key{key} ttl:{await redis.pttl(key)} 续命")
         _release1 = await lock1.release()
         time.sleep(1)
-        logger.info(f"[{i}] {key}_release1:{_release1} {await redis.hgetall(key)}")
+        logger.info(f"[{i}] {key}_release1:{_release1} {await redis.hgetall(key)} 释放第一次锁")
         # _lock1 = await lock.acquire(blocking=True, blocking_timeout=20)
         # logger.info(f"[{i}] {key}_lock1:{_lock1} {await redis.hgetall(key)}")
         # _release1 = await lock.release()
