@@ -9,7 +9,7 @@ from aioredis.exceptions import LockError, LockNotOwnedError
 
 if TYPE_CHECKING: from aioredis import Redis
 
-_task_local = contextvars.ContextVar("lock", default=None)
+_task_local = contextvars.ContextVar("_task_local", default=None)
 
 
 class SimpleToken:
