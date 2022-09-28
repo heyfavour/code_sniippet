@@ -13,7 +13,7 @@ _task_local = contextvars.ContextVar("_task_local", default=None)
 
 class SimpleToken:
     def __init__(self):
-        self.token = ""
+        self.token = None
 
     def get(self):
         return self.token
