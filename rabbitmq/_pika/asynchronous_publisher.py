@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=C0111,C0103,R0205
-
+"""
+基于事件驱动的伪异步
+"""
 import functools
 import logging
 import json
