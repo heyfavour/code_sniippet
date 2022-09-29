@@ -36,11 +36,9 @@ async def consumer_info():
         channel = await connection.channel()
         await channel.set_qos(prefetch_count=1)
 
-        direct_ex = await channel.declare_exchange("direct-ex", ExchangeType.DIRECT)
+        topic_ex = await channel.declare_exchange("topic-ex", ExchangeType.TOPIC)
         queue = await channel.declare_queue("info")
-        await queue.bind(direct_ex, routing_key="info")
-        await queue.bind(direct_ex, routing_key="warning")
-        await queue.bind(direct_ex, routing_key="error")
+        await queue.bind(topic_ex, routing_key="log.*")
 
         async def callback(message) -> None:
             async with message.process():
@@ -59,9 +57,9 @@ async def consumer_error():
         channel = await connection.channel()
         await channel.set_qos(prefetch_count=1)
 
-        direct_ex = await channel.declare_exchange("direct-ex", ExchangeType.DIRECT)
+        topic_ex = await channel.declare_exchange("topic-ex", ExchangeType.TOPIC)
         queue = await channel.declare_queue("error")
-        await queue.bind(direct_ex, routing_key="error")
+        await queue.bind(topic_ex, routing_key="*.error")
 
         async def callback(message) -> None:
             async with message.process():
