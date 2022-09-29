@@ -1,99 +1,101 @@
 import datetime
 import json
 import os
+import asyncio
 import time
 
-import pika
-
+from aio_pika import DeliveryMode, ExchangeType, Message, connect
 from multiprocessing import Process
 
-"""
-    producer->channel->exchange->Routingkey(binding)->queue->channel->consumer
-                               ->Routingkey(binding)->queue->channel->consumer
-
-    exchange  type "" direct topic headers fanout-广播
-
-    binding:queue->exchange
-
-    49.235.242.224
-"""
 HOST = "49.235.242.224"
 PORT = 50009
-QUEUE_NAME = "BANK_CALLBACK"
 
 
-def producer():
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
-    channel.exchange_declare(exchange='direct—ex', exchange_type='direct')
-    channel.confirm_delivery()
-    data = {"id": 1, "status": "成功", "time": datetime.datetime.now().strftime("%Y%m%d %H%M%S")}
-    direct_dict = {0: "info", 1: "warnning", 2: "error"}
-    try:
-        for i in range(10):
-            routing_key = direct_dict[i % 3]
-            data["level"] = routing_key
-            channel.basic_publish(
-                exchange='direct—ex',
-                routing_key=routing_key,
-                body=json.dumps(data, ensure_ascii=False),
-                properties=pika.BasicProperties(delivery_mode=pika.DeliveryMode.Persistent),
+async def producer(i):
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()  # publisher_confirms 交换机确认 默认True
+        fanout_ex = await channel.declare_exchange("direct-ex", ExchangeType.DIRECT)
+        level_dict = {0: "info", 1: "warning", 2: "error"}
+        data = {"id": i, "status": "成功", "level": level_dict[i % 3]}
+        try:
+            await fanout_ex.publish(
+                Message(
+                    json.dumps(data, ensure_ascii=False).encode("utf-8"),
+                    delivery_mode=DeliveryMode.PERSISTENT,
+                ),
+                routing_key=data["level"]
             )
-    except Exception as e:
-        print(f'ACK ERROR : {str(e)}')
-    # 程序退出前，确保刷新网络缓冲以及消息发送给rabbitmq，需要关闭本次连接
-    connection.close()
+        except Exception as e:
+            print(f'Message could not be confirmed{str(e)}')
 
 
-def consumer_info():  # auto_ack=False
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    # 2. 创建一个channel
-    channel = connection.channel()
-    # 指定交换机
-    channel.exchange_declare(exchange='direct—ex', exchange_type='direct')
-    queue = channel.queue_declare(queue="INFO", durable=True)
-    queue_name = queue.method.queue
-    channel.queue_bind(queue=queue_name, exchange='direct—ex', routing_key="info")
-    channel.queue_bind(queue=queue_name, exchange='direct—ex', routing_key="warnning")
+async def consumer_info():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()
+        await channel.set_qos(prefetch_count=1)
 
-    # 4. 定义消息处理程序
-    def callback(ch, method, properties, body):
-        print(f'[{os.getpid()}:INFO] Received :{json.loads(body)}')
-        ch.basic_ack(delivery_tag=method.delivery_tag, multiple=False)  # 手动应答 multiple = True 批量应答 可能会造成消息丢失
+        direct_ex = await channel.declare_exchange("direct-ex", ExchangeType.DIRECT)
+        queue = await channel.declare_queue("info")
+        await queue.bind(direct_ex, routing_key="info")
+        await queue.bind(direct_ex, routing_key="warning")
+        await queue.bind(direct_ex, routing_key="error")
 
-    # 5. 接收来自指定queue的消息
-    # 在prefetch_count表示接收的消息数量，当我接收的消息没有处理完（用basic_ack标记消息已处理完毕）之前不会再接收新的消息了
-    channel.basic_qos(prefetch_count=1)  # 避免性能不同但是公平分发
-    # queue 接收指定queue的消息 on_message_callback 接收到消息后的处理程序 auto_ack 指定为True，表示消息接收到后自动给消息发送方回复确认，已收到消息 arguments
-    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
-    print('[*] Waiting for message.')
-    channel.start_consuming()
+        async def callback(message) -> None:
+            async with message.process():
+                await asyncio.sleep(0.2)
+                print(f"[info] Received message is: {json.loads(message.body)}")
+
+        await queue.consume(callback)
+
+        print("[info] Waiting for logs. To exit press CTRL+C")
+        await asyncio.Future()
 
 
-def consumer_error():  # auto_ack=False
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
-    queue = channel.queue_declare(queue="ERROR", durable=True)
-    queue_name = queue.method.queue
-    channel.queue_bind(queue=queue_name,exchange='direct—ex', routing_key="error")
-    def callback(ch, method, properties, body):
-        print(f'[{os.getpid()}:ERROR] Received :{json.loads(body)}')
-        ch.basic_ack(delivery_tag=method.delivery_tag, multiple=False)  # 手动应答 multiple = True 批量应答 可能会造成消息丢失
-    channel.basic_qos(prefetch_count=1)  # 避免性能不同但是公平分发
-    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
-    print('[*] Waiting for message.')
-    channel.start_consuming()
+async def consumer_error():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()
+        await channel.set_qos(prefetch_count=1)
+
+        direct_ex = await channel.declare_exchange("direct-ex", ExchangeType.DIRECT)
+        queue = await channel.declare_queue("error")
+        await queue.bind(direct_ex, routing_key="error")
+
+        async def callback(message) -> None:
+            async with message.process():
+                await asyncio.sleep(0.2)
+                print(f"[error] Received message is: {json.loads(message.body)}")
+
+        await queue.consume(callback)
+
+        print("[error] Waiting for logs. To exit press CTRL+C")
+        await asyncio.Future()
+
+
+def run_producer():
+    for i in range(10): asyncio.run(producer(i))
+
+
+def run_consumer_1():
+    asyncio.run(consumer_info())
+
+
+def run_consumer_2():
+    asyncio.run(consumer_error())
+
+
+def run():
+    p = Process(target=run_producer)
+    c1 = Process(target=run_consumer_1)
+    c2 = Process(target=run_consumer_2)
+
+    c1.start()
+    c2.start()
+    time.sleep(1)
+    p.start()
 
 
 if __name__ == '__main__':
-    producer()
-    info = Process(target=consumer_info)
-    error = Process(target=consumer_error)
-    info.start()
-    error.start()
+    run()
