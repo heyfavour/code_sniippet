@@ -15,11 +15,11 @@ async def producer(i):
     connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
     async with connection:
         channel = await connection.channel()  # publisher_confirms 交换机确认 默认True
-        fanout_ex = await channel.declare_exchange("direct-ex", ExchangeType.DIRECT)
+        direct_ex = await channel.declare_exchange("direct-ex", ExchangeType.DIRECT)
         level_dict = {0: "info", 1: "warning", 2: "error"}
         data = {"id": i, "status": "成功", "level": level_dict[i % 3]}
         try:
-            await fanout_ex.publish(
+            await direct_ex.publish(
                 Message(
                     json.dumps(data, ensure_ascii=False).encode("utf-8"),
                     delivery_mode=DeliveryMode.PERSISTENT,
