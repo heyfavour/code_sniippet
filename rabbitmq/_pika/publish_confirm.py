@@ -1,3 +1,7 @@
+"""
+ 'alternate-exchange': 'backup-ex'
+ 备份交换机 交换机收到路由不到队列的消息就会发送到备用交换机绑定的队列中
+"""
 import datetime
 import time
 
