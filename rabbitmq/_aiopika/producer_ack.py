@@ -1,62 +1,49 @@
-#!/usr/bin/env python
-# pip install pika
+import datetime
 import json
 import os
-import time
+import asyncio
 
-import pika
-
+from aio_pika import DeliveryMode, ExchangeType, Message, connect
 from multiprocessing import Process
 
-"""
-    producer->channel->exchange->queue->channel->consumer
-    49.235.242.224
-"""
 HOST = "49.235.242.224"
 PORT = 50009
-QUEUE_NAME = "BANK_CALLBACK"
 
+"""
+mandatory
+True:如果exchange根据自身类型和消息routeKey无法找到一个符合条件的queue，那么会调用basic.return方法将消息返回给生产者
+DeliveredMessage(delivery=Basic.Return header=Content-Header,body=Content-Body)
 
-def ack_block():
-    # 1.创建凭证，使用rabbitmq用户密码登录
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)#heartbeat=600,blocked_connection_timeout=300
-    connection = pika.BlockingConnection(con_para)
-    # 2.创建channel
+immediate
+True:如果exchange在将消息路由到queue(s)时发现对于的queue上么有消费者，那么这条消息不会放入队列中
+"""
 
-    channel = connection.channel()
-    # 3. 创建队列，queue_declare可以使用任意次数，
-    # 如果指定的queue不存在，则会创建一个queue，如果已经存在，
-    # 则不会做其他动作，官方推荐，每次使用时都可以加上这句
-    # queue_declare:passive 队列是否存在  durable 持久化 exclusive 其他信道无法访问 auto_delete 数据消费完成后是否删除队列  arguments 延时 死信
-    channel.queue_declare(queue=QUEUE_NAME, durable=True)
-    # 注意在rabbitmq中，消息想要发送给队列，必须经过交换(exchange)，
-    # 初学可以使用空字符串交换(exchange='')，
-    # 它允许我们精确的指定发送给哪个队列(routing_key=''),
-    # 参数body值发送的数据
-    data = {"id": 1, "status": "成功"}
-    channel.confirm_delivery()  # 发布确认
-    # channel.basic_publish(exchange='', routing_key=QUEUE_NAME, body=json.dumps(data, ensure_ascii=False))
-    # Send a message
-    try:
-        for i in range(100):
-            ack = channel.basic_publish(
-                exchange='',
-                routing_key=QUEUE_NAME,
-                body=json.dumps(data, ensure_ascii=False),
-                properties=pika.BasicProperties(content_type='text/plain', delivery_mode=pika.DeliveryMode.Persistent)
-            )
-            print(f'ack is {ack}')
-    except Exception as e:
-        print('ERROR ACK')
-    # 程序退出前，确保刷新网络缓冲以及消息发送给rabbitmq，需要关闭本次连接
-    connection.close()
+async def ack_async():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()  # publisher_confirms 交换机确认 默认True
+        direct_ex = await channel.declare_exchange("direct-ex", ExchangeType.DIRECT)
+        ack_queue = await channel.declare_queue("ack_async",durable=True)
+        await ack_queue.bind(direct_ex,routing_key="ack_async")
+        data = {"id": 0, "status": "成功"}
+        try:
+            start = datetime.datetime.now()
+            for i in range(1000):
+                await direct_ex.publish(
+                    Message(
+                        json.dumps(data, ensure_ascii=False).encode("utf-8"),
+                        delivery_mode=DeliveryMode.PERSISTENT,
+                    ),
+                    routing_key="ack_async",
+                    mandatory=True,
+                )
+            end = datetime.datetime.now()
 
+            print(f"{end-start}")
+        except Exception as e:
+            print(f'Message could not be confirmed{str(e)}')
 
-def ack_async():
-    pass
 
 
 if __name__ == '__main__':
-    ack_block()
-    ack_async()
+    asyncio.run(ack_async())
