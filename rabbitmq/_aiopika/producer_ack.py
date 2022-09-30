@@ -2,7 +2,7 @@ import datetime
 import json
 import os
 import asyncio
-
+from aiormq.abc import DeliveredMessage
 from aio_pika import DeliveryMode, ExchangeType, Message, connect
 from multiprocessing import Process
 
@@ -23,13 +23,13 @@ async def ack_async():
     async with connection:
         channel = await connection.channel()  # publisher_confirms 交换机确认 默认True
         direct_ex = await channel.declare_exchange("direct-ex", ExchangeType.DIRECT)
-        ack_queue = await channel.declare_queue("ack_async",durable=True)
-        await ack_queue.bind(direct_ex,routing_key="ack_async")
+        # ack_queue = await channel.declare_queue("ack_async",durable=True)
+        # await ack_queue.bind(direct_ex,routing_key="ack_async")
         data = {"id": 0, "status": "成功"}
         try:
             start = datetime.datetime.now()
-            for i in range(1000):
-                await direct_ex.publish(
+            for i in range(10):
+                ack = await direct_ex.publish(
                     Message(
                         json.dumps(data, ensure_ascii=False).encode("utf-8"),
                         delivery_mode=DeliveryMode.PERSISTENT,
@@ -37,6 +37,7 @@ async def ack_async():
                     routing_key="ack_async",
                     mandatory=True,
                 )
+                if isinstance(ack,DeliveredMessage):print("message not send")
             end = datetime.datetime.now()
 
             print(f"{end-start}")
