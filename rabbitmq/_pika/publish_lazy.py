@@ -8,7 +8,7 @@ from multiprocessing import Process
 HOST = "49.235.242.224"
 PORT = 50009
 
-
+#收到信息存到磁盘
 def init():
     credentials = pika.PlainCredentials("product", "product")
     con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
