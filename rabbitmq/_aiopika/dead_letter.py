@@ -5,106 +5,120 @@
 3:消息队列的消息数量已经超过最大队列长度，无法再继续新增消息到MQ中
 4:一个队列中的消息的TTL对其他队列中同一条消息的TTL没有影响
 """
+import json
+from aiormq.abc import DeliveredMessage
+import asyncio
 import time
 
-import pika
-import json, os
+from aio_pika import DeliveryMode, ExchangeType, Message, connect
 from multiprocessing import Process
 
 HOST = "49.235.242.224"
 PORT = 50009
 
 
-def init():
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
+async def init():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()
+        normal_ex = await channel.declare_exchange("normal-ex", ExchangeType.DIRECT)
+        arguments = {}
+        arguments["x-dead-letter-exchange"] = "dead-ex"  # 死信交换机
+        arguments["x-dead-letter-routing-key"] = ""  # 死信routing-key
+        arguments["x-max-length"] = 100  # 死信routing-key
+        normal_queue = await channel.declare_queue(name="normal-queue", arguments=arguments)
+        await normal_queue.bind(normal_ex, routing_key="normal-queue")
+
+        dead_ex = await channel.declare_exchange("dead-ex", ExchangeType.DIRECT)
+        dead_queue = await channel.declare_queue(name="dead-queue")
+        await dead_queue.bind(exchange=dead_ex, routing_key="")
 
 
-
-    channel.exchange_declare(exchange='normal-ex', exchange_type='direct',durable=True)
-    arguments = {}
-    # 过期时间
-    # arguments["x-message-ttl"] = 100 #可由生产者发送设置 两个一起设置由较小的决定
-    arguments["x-dead-letter-exchange"] = "dead-ex"  # 死信交换机
-    arguments["x-dead-letter-routing-key"] = ""  # 死信routing-key
-    arguments["x-max-length"] = 100  # 死信routing-key
-    channel.queue_declare(queue="normal-queue", durable=True, arguments=arguments)
-    channel.queue_bind(queue="normal-queue", exchange='normal-ex', routing_key="")
-
-    channel.exchange_declare(exchange='dead-ex', exchange_type='direct',durable=True)
-    channel.queue_declare(queue="dead-queue", durable=True)
-    channel.queue_bind(queue="dead-queue", exchange='dead-ex', routing_key="")
-    channel.close()
-
-
-def producer():
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
-    channel.confirm_delivery()
-    data = {"id": 1, "status": "成功"}
-    try:
-        for i in range(100):
+async def producer():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel(publisher_confirms=True)
+        normal_ex = await channel.declare_exchange("normal-ex", ExchangeType.DIRECT)
+        data = {"id": 1, "status": "成功"}
+        for i in range(110):
             data["index"] = i
-            channel.basic_publish(
-                exchange='normal-ex',
-                routing_key="",
-                body=json.dumps(data, ensure_ascii=False),
-                properties=pika.BasicProperties(delivery_mode=pika.DeliveryMode.Persistent, expiration="50000"),
+            ack = await normal_ex.publish(
+                Message(
+                    json.dumps(data, ensure_ascii=False).encode("utf-8"),
+                    delivery_mode=DeliveryMode.PERSISTENT,
+                    expiration=1,#seconds
+                ),
+                routing_key="normal-queue",
+                mandatory=True
             )
-    except Exception as e:
-        print(f'ACK ERROR : {str(e)}')
-    # 程序退出前，确保刷新网络缓冲以及消息发送给rabbitmq，需要关闭本次连接
-    connection.close()
-    print('[PRODUCER] SEND ALL.')
+            if isinstance(ack, DeliveredMessage): print("message not send")
 
 
-def comsumer_normal():
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
-    channel.basic_qos(prefetch_count=1)  # 避免性能不同但是公平分发
+async def consumer_normal():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()
+        await channel.set_qos(prefetch_count=1)
 
-    def callback(ch, method, properties, body):
-        if json.loads(body)["index"] % 2 == 0:
-            #ch.basic_nack(delivery_tag=method.delivery_tag, multiple=False, requeue=False)
-            ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
-        else:
-            print(f'[{os.getpid()}:NORMAL] Received :{json.loads(body)}')
-            ch.basic_ack(delivery_tag=method.delivery_tag, multiple=False)
+        arguments = {}
+        arguments["x-dead-letter-exchange"] = "dead-ex"  # 死信交换机
+        arguments["x-dead-letter-routing-key"] = ""  # 死信routing-key
+        arguments["x-max-length"] = 100  # 死信routing-key
+        normal_queue = await channel.declare_queue(name="normal-queue", arguments=arguments)
 
-    channel.basic_consume(queue="normal-queue", on_message_callback=callback, auto_ack=False)
-    print('[NORMAL] Waiting for message.')
-    channel.start_consuming()
+        async def callback(message) -> None:
+            async with message.process():
+                await asyncio.sleep(0.2)
+                print(f"[NORMAL] Received message is: {json.loads(message.body)}")
+
+        await normal_queue.consume(callback)
+
+        print("[info] Waiting for logs. To exit press CTRL+C")
+        await asyncio.Future()
 
 
-def comsumer_dead():
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
-    channel.basic_qos(prefetch_count=1)  # 避免性能不同但是公平分发
+async def consumer_dead():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()
+        await channel.set_qos(prefetch_count=1)
 
-    def callback(ch, method, properties, body):
-        print(f'[{os.getpid()}:DEAD] Received :{json.loads(body)}')
-        ch.basic_ack(delivery_tag=method.delivery_tag, multiple=False)
+        dead_queue = await channel.declare_queue(name="dead-queue")
 
-    channel.basic_consume(queue="dead-queue", on_message_callback=callback, auto_ack=False)
-    print('[DEAD] Waiting for message.')
-    channel.start_consuming()
+        async def callback(message) -> None:
+            async with message.process():
+                await asyncio.sleep(0.2)
+                #print(f"[DEAD] Received message is: {json.loads(message.body)}")
+
+        await dead_queue.consume(callback)
+
+        print("[info] Waiting for logs. To exit press CTRL+C")
+        await asyncio.Future()
+
+
+def run_producer():
+    asyncio.run(producer())
+
+
+def run_consumer_normal():
+    asyncio.run(consumer_normal())
+
+
+def run_consumer_dead():
+    asyncio.run(consumer_dead())
+
+
+def run():
+    asyncio.run(init())
+    time.sleep(1)
+    p = Process(target=run_producer)
+    cn = Process(target=run_consumer_normal)
+    cd = Process(target=run_consumer_dead)
+    p.start()
+    cn.start()
+    cd.start()
+
 
 
 if __name__ == '__main__':
-    init()
-    normal = Process(target=comsumer_normal)
-    dead = Process(target=comsumer_dead)
-    produce = Process(target=producer)
-    produce.start()
-    normal.start()
-    dead.start()
-
-
+    run()
