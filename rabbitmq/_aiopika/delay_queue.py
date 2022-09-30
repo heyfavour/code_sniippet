@@ -7,78 +7,73 @@ rabbitmq-plugins enable rabbitmq_delayed_message_exchange
 wget https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/3.10.2/rabbitmq_delayed_message_exchange-3.10.2.ez
 docker cp rabbitmq_delayed_message_exchange-3.10.2.ez 98e0d1d698de:/plugins
 docker exec -it 98e0d1d698de /bin/bash
->rabbitmq-plugins enable rabbitmq_delayed_message_exchang
+>rabbitmq-plugins enable rabbitmq_delayed_message_exchange
 docker restart 98e0d1d698de
 """
-import datetime
-import time
+import json
+import time,datetime
+from aiormq.abc import DeliveredMessage
+import asyncio
 
-import pika
-import json, os
+
+from aio_pika import DeliveryMode, ExchangeType, Message, connect
 from multiprocessing import Process
 
 HOST = "49.235.242.224"
 PORT = 50009
 
 
-def init():
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
-
-    channel.exchange_declare(exchange="delay-ex", exchange_type="x-delayed-message", arguments={"x-delayed-type": "direct"})
-    channel.queue_declare(queue="delay-queue")
-    channel.queue_bind(queue="delay-queue", exchange="delay-ex", routing_key="")
-    channel.close()
+async def init():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()
+        normal_ex = await channel.declare_exchange("delay-ex", ExchangeType.X_DELAYED_MESSAGE,arguments={"x-delayed-type": "direct"})
+        delay_queue = await channel.declare_queue(name="delay-queue")
+        await delay_queue.bind(exchange=normal_ex, routing_key="")
 
 
-def producer():
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
-    channel.confirm_delivery()
-    data = {"id": 1, "status": "成功"}
-    try:
+async def producer():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()
+        normal_ex = await channel.get_exchange("delay-ex")
+        data = {}
         for i in range(10):
-            data["delay-time"] = i*1000
+            data["delay-time"] = i*1000 #seconds = delay-time/1000
             data["index"] = i
             data["time"] = datetime.datetime.now().strftime("%Y%m%d %H%M%S")
-            channel.basic_publish(
-                exchange='delay-ex',
+            ack = await normal_ex.publish(
+                Message(
+                    json.dumps(data, ensure_ascii=False).encode("utf-8"),
+                    delivery_mode=DeliveryMode.PERSISTENT,
+                    headers={'x-delay': data["delay-time"]},
+                ),
                 routing_key="",
-                body=json.dumps(data, ensure_ascii=False),
-                properties=pika.BasicProperties(delivery_mode=pika.DeliveryMode.Persistent,headers={'x-delay': data["delay-time"]}),
+                # mandatory=True #无法使用 会返回错误的 ack
             )
-    except Exception as e:
-        print(f'ACK ERROR : {str(e)}')
-    # 程序退出前，确保刷新网络缓冲以及消息发送给rabbitmq，需要关闭本次连接
-    connection.close()
-    print('[PRODUCER] SEND ALL.')
+            # if isinstance(ack, DeliveredMessage): print("message not send")
 
 
-def consumer():
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
-    channel.basic_qos(prefetch_count=1)
+async def consumer():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()
+        await channel.set_qos(prefetch_count=1)
+        delay_queue = await channel.get_queue("delay-queue")
 
-    def callback(ch, method, properties, body):
-        print(f'[{os.getpid()}:Delay:{datetime.datetime.now()}] Received :{json.loads(body)}')
-        print("sleep",datetime.datetime.now() - datetime.datetime.strptime(json.loads(body)["time"],"%Y%m%d %H%M%S"))
-        ch.basic_ack(delivery_tag=method.delivery_tag, multiple=False)
+        async def callback(message) -> None:
+            async with message.process():
+                msg_time = datetime.datetime.now()
+                msg = json.loads(message.body)
+                print(f"[DELAY] Received message is: {msg} {msg_time-datetime.datetime.strptime(msg['time'],'%Y%m%d %H%M%S')}")
+        await delay_queue.consume(callback)
 
-    channel.basic_consume(queue="delay-queue", on_message_callback=callback, auto_ack=False)
-    print('[NORMAL] Waiting for message.')
-    channel.start_consuming()
+        print("[info] Waiting for logs. To exit press CTRL+C")
+        await asyncio.Future()
 
-
+def run():
+    asyncio.run(init())
+    asyncio.run(producer())
+    asyncio.run(consumer())
 if __name__ == '__main__':
-    init()
-    produce = Process(target=producer)
-    con = Process(target=consumer)
-    produce.start()
-    time.sleep(20)
-    con.start()
+    run()
