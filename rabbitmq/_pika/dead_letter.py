@@ -53,7 +53,7 @@ def producer():
                 exchange='normal-ex',
                 routing_key="",
                 body=json.dumps(data, ensure_ascii=False),
-                properties=pika.BasicProperties(delivery_mode=pika.DeliveryMode.Persistent, expiration="50000"),
+                properties=pika.BasicProperties(delivery_mode=pika.DeliveryMode.Persistent, expiration="50000"),#50s
             )
     except Exception as e:
         print(f'ACK ERROR : {str(e)}')
