@@ -1,70 +1,76 @@
 import datetime
-import time
-
-import pika
-import json, os
+import json
+import os
+import asyncio
+from aiormq.abc import DeliveredMessage
+from aio_pika import DeliveryMode, ExchangeType, Message, connect
 from multiprocessing import Process
 
 HOST = "49.235.242.224"
 PORT = 50009
 
 
-def init():
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
-    channel.exchange_declare(exchange="priority-ex", exchange_type="direct")
+async def init():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()
+        priority_ex = await channel.declare_exchange("priority-ex", ExchangeType.DIRECT)
 
-    arguments = {'x-max-priority': 5}  # 0-255越大越优先 不建议太大会因为排序浪费性能
-    channel.queue_declare(queue="priority-queue",arguments=arguments)
-    channel.queue_bind(queue="priority-queue", exchange="priority-ex",routing_key="")
-    channel.close()
+        arguments = {'x-max-priority': 5}  # 0-255越大越优先 不建议太大会因为排序浪费性能
+        queue = await channel.declare_queue(name="priority-queue", arguments=arguments)
+        await queue.bind(exchange=priority_ex, routing_key="")
 
 
-def producer():
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
-    channel.confirm_delivery()  # 仅仅确认交换机收到
-    data = {"id": 1, "status": "成功"}
-    for i in range(20):
-        data["priority"] = i % 5
-        data["id"] = i
-        channel.basic_publish(
-            exchange='priority-ex',
+async def producer(i):
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel(publisher_confirms=False)  # True aiormq.exceptions.ChannelNotFoundEntity
+        ex = await channel.get_exchange("priority-ex",ensure=True)  # passive=True aiormq.exceptions.ChannelNotFoundEntity
+        data = {"id": i, "status": "成功", "priority": i % 5}
+        ack = await ex.publish(
+            Message(
+                json.dumps(data, ensure_ascii=False).encode("utf-8"),
+                delivery_mode=DeliveryMode.PERSISTENT,
+                priority=data['priority'],
+            ),
             routing_key="",
-            body=json.dumps(data, ensure_ascii=False),
-            properties=pika.BasicProperties(delivery_mode=pika.DeliveryMode.Persistent,priority=data["priority"] ),
             mandatory=True,
         )
-    connection.close()
-    print('[PRODUCER] SEND ALL.')
 
 
-def consumer():
-    credentials = pika.PlainCredentials("product", "product")
-    con_para = pika.ConnectionParameters(host=HOST, port=PORT, virtual_host='/product', credentials=credentials)
-    connection = pika.BlockingConnection(con_para)
-    channel = connection.channel()
+async def consumer():
+    connection = await connect(host=HOST, port=PORT, login="admin", password="admin")  # ->Connection
+    async with connection:
+        channel = await connection.channel()
+        await channel.set_qos(prefetch_count=1)
 
-    def callback(ch, method, properties, body):
-        print(f'[{os.getpid()}] Received :{json.loads(body)}')
-        time.sleep(0.5)
-        ch.basic_ack(delivery_tag=method.delivery_tag, multiple=False)  # 手动应答 multiple = True 批量应答 可能会造成消息丢失
+        queue = await channel.get_queue("priority-queue")
 
-    channel.basic_qos(prefetch_count=1)  # 避免性能不同但是公平分发
-    channel.basic_consume(queue="priority-queue", on_message_callback=callback, auto_ack=False)
-    channel.start_consuming()
+        async def callback(message) -> None:
+            async with message.process():
+                await asyncio.sleep(0.2)
+                print(f"[info] Received message is: {json.loads(message.body)}")
+
+        await queue.consume(callback)
+
+        print("[info] Waiting for logs. To exit press CTRL+C")
+        await asyncio.Future()
+
+
+def run_producer():
+    for i in range(100): asyncio.run(producer(i))
+
+
+def run_consumer():
+    asyncio.run(consumer())
 
 
 def run():
-    init()
-    p = Process(target=producer)
-    c = Process(target=consumer)
-    p.start()
+    asyncio.run(init())
+    c = Process(target=run_consumer)
+    p = Process(target=run_producer)
     c.start()
+    p.start()
 
 
 if __name__ == '__main__':
