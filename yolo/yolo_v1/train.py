@@ -29,7 +29,7 @@ if __name__ == "__main__":
     criterion = YOLOv1Loss(7, 2)
 
     for epoch in range(100):
-        model.train()  # Set the module in training mode
+        model.train()  # Set the models in training mode
         train_loss = 0
         for batch_idx, (inputs, labels) in enumerate(train_loader):
             batch_start = time.time()
@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
 
 
-        model.eval()  # Sets the module in evaluation mode
+        model.eval()  # Sets the models in evaluation mode
         val_loss = 0
         with torch.no_grad():
             for data, target in val_loader:
