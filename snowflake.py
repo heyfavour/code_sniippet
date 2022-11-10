@@ -80,6 +80,14 @@ class SnowFlake(object):
         return timestamp
 
 
+def snowflake_to_timestamp(_id):
+    _id = _id >> TIMESTAMP_LEFT_SHIFT  # strip the lower 22 bits
+    _id += TWEPOCH  # adjust for twitter epoch
+    _id = _id / 1000  # convert from milliseconds to seconds
+    return _id
+
+
 if __name__ == '__main__':
     worker = SnowFlake(1, 2)
-    for i in range(200): print(worker.generate_id())
+    id = worker.generate_id()
+    snowflake_to_timestamp(id)
