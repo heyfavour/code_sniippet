@@ -20,7 +20,7 @@ import threading
 
 def Singleton(cls):
     _instance = {}
-    lock = threading.Lock()
+    lock = threading.RLock()#lock = threading.Lock() 如果单例里面调用单例可能死锁
 
     def _singleton(*args, **kargs):
         if cls not in _instance:
