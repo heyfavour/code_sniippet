@@ -1,3 +1,4 @@
+#不推荐会重复执行init 会重新加载一次init的数据
 import threading
 
 
@@ -12,3 +13,28 @@ class Singleton:
 
     def __init__(self):
         pass
+
+#推荐
+import threading
+
+
+def Singleton(cls):
+    _instance = {}
+    lock = threading.Lock()
+
+    def _singleton(*args, **kargs):
+        if cls not in _instance:
+            with lock:
+                if cls not in _instance:
+                    _instance[cls] = cls(*args, **kargs)
+        return _instance[cls]
+
+    return _singletons
+   
+@Singleton
+class Demo():
+    def __init__(self):
+        pass
+        
+func = Singleton(Demo)
+func()
