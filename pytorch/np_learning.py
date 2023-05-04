@@ -76,6 +76,12 @@ def matrix_multiple_col():
     """
 
 
+def np_zero():
+    print(np.zeros((4,5)))
+
+
+
 if __name__ == '__main__':
     # matrix_multiple_row()
-    matrix_multiple_col()
+    #matrix_multiple_col()
+    np_zero()
