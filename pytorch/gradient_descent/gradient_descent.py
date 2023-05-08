@@ -39,12 +39,14 @@ def torch_descent(x,y):
         y_pred = forward(x)
         return (y_pred-y)**2
 
-    for epoch in range(100):
+    for epoch in range(20):
         for _x,_y in zip(x,y):
             l = loss(_x,_y)
             l.backward()
-            print(_x,_y,w.grad.item())
-            w.data = w.data - 0.01*w.grade.data
+            print(_x,_y,w.grad.item(),l.data)
+            print(w.data)
+            w.data = w.data - 0.01*w.grad.data
+            print(w.data)
             w.grad.data.zero_()
 
 
