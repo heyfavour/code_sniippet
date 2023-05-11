@@ -1,3 +1,4 @@
+import numpy
 import torch  # C语言核心
 import numpy as np
 import torch.nn as nn
@@ -21,6 +22,30 @@ def cnn():
     output = cnn(input)
     print(output.shape)
 
+def rnncell():
+    cell = nn.RNNCell(4,2)
+    data = torch.randn(3,1,4)#seq_len,batch_size input_size
+    hidden = torch.zeros(1,2)#batch_size hidden_size
+    print(data)
+    print(hidden)
+    print("===================================")
+    for i,input in enumerate(data):
+        print(input)
+        hidden = cell(input,hidden)
+        print(hidden)
+
+def rnn():
+    rnn = nn.RNN(input_size=4,hidden_size=2,num_layers=2,batch_first=True)
+    input = torch.Tensor(numpy.array([i for i in range(1,13)]).reshape(1,3,4))#batch_size seq_len feature
+    print(input)#整个输入序列
+    print("===================================")
+    out,hidden = rnn(input,None)
+    print(out)#h1->hn
+    print(hidden)#hn
+    print(out[:, -1, :])#ouput
+
 
 if __name__ == '__main__':
-    cnn()
+    #cnn()
+    #rnncell()
+    rnn()
