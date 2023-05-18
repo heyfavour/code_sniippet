@@ -4,6 +4,8 @@ import torch.nn.functional as F
 
 from torch import optim
 
+dist = None
+
 
 class Net():
     pass
@@ -14,7 +16,6 @@ def paration_dataset():
 
 
 def average_gradients(model):
-    dist = None
     size = float(dist.get_world_size())
     for param in model.parameters():
         dist.all_reduce(param.grad.data, op=dist.reduce_op.SUM)
@@ -37,6 +38,20 @@ def run(rank, size):
             loss.backward()
             average_gradients(model)
             optimizer.step()
+
+
+def run(rank, size):
+    # 点对点 0-1
+    tensor = torch.zeros(1)
+    req = None
+    if rank == 0:
+        tensor += 1
+        req = dist.isend(tensor=tensor, dst=1)
+    else:
+        req = dist.irecv(tensor=tensor,src=0)
+    req.wait()
+
+
 
 
 if __name__ == '__main__':
