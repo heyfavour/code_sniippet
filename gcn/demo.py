@@ -1,4 +1,5 @@
 """
+https://www.cnblogs.com/zhangxiann/p/pyg.html
 邻接矩阵
 特征矩阵
 
