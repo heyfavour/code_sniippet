@@ -42,4 +42,5 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             out = model(data)
             loss = criterion(out, label)
+            loss.backward()
             accuracy = torch.mean((out.argmax(1) == label).float()).item()
