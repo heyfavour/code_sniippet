@@ -82,9 +82,9 @@ class GCNConv(MessagePassing):
         print(norm)
         return self.propagate(edge_index, x=x, norm=norm)
 
-    def message(self, x_j, norm):
+    def message(self, x_j, norm):#x_j是根据邻接矩阵适配的F
         print("============================")
-        print(norm)
+        print(norm.view(-1, 1))
         # x_j [E out_channel] [7*x]
         print(x_j)
         return norm.view(-1, 1) * x_j
@@ -92,9 +92,9 @@ class GCNConv(MessagePassing):
 
 edge_index = torch.tensor([[1, 2, 3],
                            [0, 0, 0], ], dtype=torch.long)
-x = torch.tensor([[1], [1], [1], [1]], dtype=torch.float)
+x = torch.tensor([[1], [1], [1], [2]], dtype=torch.float)
 
-conv = GCNConv(1,2)
+conv = GCNConv(1,3)
 output = conv(x,edge_index)
 print(output)
 
