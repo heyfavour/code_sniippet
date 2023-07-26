@@ -84,6 +84,7 @@ class GCNConv(MessagePassing):
 
     def message(self, x_j, norm):
         print("============================")
+        print(norm)
         # x_j [E out_channel] [7*x]
         print(x_j)
         return norm.view(-1, 1) * x_j
@@ -96,13 +97,4 @@ x = torch.tensor([[1], [1], [1], [1]], dtype=torch.float)
 conv = GCNConv(1,2)
 output = conv(x,edge_index)
 print(output)
-D = torch.tensor([[4,0,0,0],
-                  [0,1,0,0],
-                  [0,0,1,0],
-                  [0,0,0,1]],dtype=torch.long)
-A = torch.tensor([[1,1,1,1],
-                  [1,1,0,0],
-                  [1,0,1,0],
-                  [1,0,0,1]],dtype=torch.long)
-print(D.pow(-0.5)*A*D.pow(-0.5))
 

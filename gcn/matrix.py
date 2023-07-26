@@ -54,3 +54,13 @@ print((torch.diag_embed(D.pow(-1.0)) @ A @ torch.diag_embed(D.pow(-1.0))) @ F)
 print("归一化修正")
 print((torch.diag_embed(D.pow(-0.5)) @ A @ torch.diag_embed(D.pow(-0.5))))
 print((torch.diag_embed(D.pow(-0.5)) @ A @ torch.diag_embed(D.pow(-0.5))) @ F)
+print("----------------------------------------------------------------")
+A = torch.tensor([[1, 0, 0, 0], [1, 1, 0, 0], [1, 0, 1, 0], [1, 0, 0, 1]], dtype=torch.float)  # 邻接矩阵
+index_edge = torch.tensor([[1, 2, 3, ],
+                           [0, 0, 0, ]])
+index_edge, _ = add_self_loops(index_edge, num_nodes=4)
+f, t = index_edge
+D = degree(t, 4, dtype=torch.long)
+print(torch.diag_embed(D))
+print(D.pow(-0.5))
+print((torch.diag_embed(D.pow(-0.5)) @ A @ torch.diag_embed(D.pow(-0.5))))
