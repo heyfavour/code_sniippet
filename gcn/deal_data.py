@@ -5,10 +5,16 @@
 4.如何用PyG加载一个Batch 的图片(torch_geometric.data.DataLoader)、
 """
 import torch
+import networkx as nx
+import matplotlib.pyplot as plt
+
 from torch_geometric.data import Data
 from torch_geometric.data.batch import Batch
 from torch_geometric.datasets import TUDataset
+from torch_geometric.utils import to_networkx
 from torch_geometric.loader import DataLoader
+
+from dataset import GCNDataset
 
 
 def graph_data():
@@ -37,19 +43,49 @@ def graph_batch():
     batch_list = [data, data, data]
     graph_batch = Batch.from_data_list(batch_list)
     print(graph_batch)
+    # ptr每个数据的范围
+    print(graph_batch.ptr)  # [0, 3, 6, 9]
+    print(graph_batch.batch)  #
     print(graph_batch[1])
     # DataBatch(x=[9, 1], edge_index=[2, 12], batch=[9], ptr=[4])
     batch_list = graph_batch.to_data_list()
     print(batch_list)
 
 
+def graph_dataset():
+    pass
+
+
 def graph_dataloader():
-    dataset = TUDataset(root='./', name='ENZYMES', use_node_attr=True)
-    loader = DataLoader(dataset, batch_size=32, shuffle=True)
-    for idex, batch in enumerate(loader):
-        pass
+
+    dataset = GCNDataset(root='./')
+    # print(dataset)  # [600]
+    # print(dataset.data)  # Data(x=[19580, 21], edge_index=[2, 74564], y=[600])
+    show_graph(dataset[0])
+    # print(dataset[0])  # Data(edge_index=[2, 168], x=[37, 21], y=[1])
+    # print(dataset.num_classes)#6
+    # print(dataset.num_features)
+    # print(dataset.num_node_labels)
+    # print("--------------------------------------------------")
+    # loader = DataLoader(dataset, batch_size=32, shuffle=True)
+    # for idx, batch in enumerate(loader):  #
+    #     print(batch)
+    #     # print(batch.ptr)
+    #     # print(batch.batch)
+    #     print(batch[0])
+    #     break
+
+
+def show_graph(data):
+    print("show graph ===============================")
+    print(data)
+    G = to_networkx(data)
+    nx.draw(G, with_labels=True)
+    # nx.draw(G, with_labels=True, node_color=data.y)
+    plt.show()
 
 
 if __name__ == '__main__':
-    graph_data()
-    graph_batch()
+    # graph_data()
+    # graph_batch()
+    graph_dataloader()
