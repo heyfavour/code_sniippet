@@ -81,20 +81,11 @@ class GCNDataset(InMemoryDataset):
         # edge_attr = cat([edge_attributes, edge_labels]) None
         # graph_attributes 回归
         # graph_labels 分类
-
-        # if self.pre_filter is not None or self.pre_transform is not None:
-        #     data_list = [self.get(idx) for idx in range(len(self))]
-        #
-        #     if self.pre_filter is not None:
-        #         data_list = [d for d in data_list if self.pre_filter(d)]
-        #
-        #     if self.pre_transform is not None:
-        #         data_list = [self.pre_transform(d) for d in data_list]
-        #
-        #     self.data, self.slices = self.collate(data_list)
-        #     self._data_list = None  # Reset cache.
-
-        # torch.save((self._data, self.slices, sizes), self.processed_paths[0])
+        # num_nodes = 19580 x.size(0)
+        # remove_self_loops -> coalesce -> Data Data(x=[19580, 21], edge_index=[2, 74564], y=[600])
+        # data, slices, sizes
+        torch.save((self._data, self.slices, sizes), self.processed_paths[0])
+        #.\data\processed\data.pt
 
     # def download(self):
     #     pass
