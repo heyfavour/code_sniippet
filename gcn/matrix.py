@@ -64,3 +64,4 @@ D = degree(t, 4, dtype=torch.long)
 print(torch.diag_embed(D))
 print(D.pow(-0.5))
 print((torch.diag_embed(D.pow(-0.5)) @ A @ torch.diag_embed(D.pow(-0.5))))
+
