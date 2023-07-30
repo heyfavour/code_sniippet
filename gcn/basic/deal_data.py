@@ -9,6 +9,7 @@ from torch_geometric.data import Data
 from torch_geometric.data.batch import Batch
 from torch_geometric.datasets import TUDataset
 from torch_geometric.loader import DataLoader
+from torch_geometric.utils import scatter
 
 
 def graph_data():
@@ -29,22 +30,25 @@ def graph_data():
 
 
 def graph_batch():
-    batch_list = []
     edge_index = torch.tensor([[0, 1, 1, 2],
                                [1, 0, 2, 1]], dtype=torch.long)
-    x = torch.tensor([[0], [0], [0]], dtype=torch.float)
+    x = torch.tensor([[1], [2], [3]], dtype=torch.float)
     data = Data(x=x, edge_index=edge_index, )
     batch_list = [data, data, data]
     graph_batch = Batch.from_data_list(batch_list)
     print(graph_batch)
     print(graph_batch[1])
+    print(graph_batch.batch)#表示节点但属于哪个图
+    x = scatter(graph_batch.x, graph_batch.batch, dim=0, reduce='add')
+    print(x)
     # DataBatch(x=[9, 1], edge_index=[2, 12], batch=[9], ptr=[4])
     batch_list = graph_batch.to_data_list()
     print(batch_list)
 
 
+
 def graph_dataloader():
-    dataset = TUDataset(root='./', name='ENZYMES', use_node_attr=True)
+    dataset = TUDataset(root='./', name='data', use_node_attr=True)
     loader = DataLoader(dataset, batch_size=32, shuffle=True)
     for idex, batch in enumerate(loader):
         pass

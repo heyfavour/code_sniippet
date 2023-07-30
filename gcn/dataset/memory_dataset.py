@@ -13,35 +13,31 @@ tree:
         node_attributes:19580个节点的属性向量 [19580 21] F
         node_label:[19580 1] 节点所属的原子类型
 """
-import os
-import torch
-
-from torch_geometric.data import Dataset, InMemoryDataset
-
-import os
 import os.path as osp
-import shutil
-from typing import Callable, List, Optional
+from typing import List
 
 import torch
 
-from torch_geometric.data import InMemoryDataset, download_url, extract_zip
+from torch_geometric.data import InMemoryDataset, download_url
 from torch_geometric.io import read_tu_data
+from torch_geometric.loader import DataLoader
 
 
 class GCNDataset(InMemoryDataset):
     def __init__(self, root: str, transform=None, pre_transform=None, pre_filter=None):
         super().__init__(root, transform, pre_transform, pre_filter)
+        # _download
+        # _process -> torch.save self.processed_paths[0]
         out = torch.load(self.processed_paths[0])
         self.data, self.slices, self.sizes = out
 
     @property
     def raw_dir(self) -> str:
-        return osp.join(self.root, 'data', "raw")
+        return osp.join(self.root, '../data', "raw")
 
     @property
     def processed_dir(self) -> str:
-        return osp.join(self.root, 'data', "processed")
+        return osp.join(self.root, '../data', "processed")
 
     @property
     def num_node_labels(self) -> int:
@@ -50,14 +46,6 @@ class GCNDataset(InMemoryDataset):
     @property
     def num_node_attributes(self) -> int:
         return self.sizes['num_node_attributes']
-
-    @property
-    def num_edge_labels(self) -> int:
-        return self.sizes['num_edge_labels']
-
-    @property
-    def num_edge_attributes(self) -> int:
-        return self.sizes['num_edge_attributes']
 
     @property
     def raw_file_names(self) -> List[str]:
@@ -69,7 +57,7 @@ class GCNDataset(InMemoryDataset):
         return 'data.pt'
 
     def process(self):
-        self.data, self.slices, sizes = read_tu_data(self.raw_dir, "ENZYMES")
+        self.data, self.slices, sizes = read_tu_data(self.raw_dir, "ENZYMES")  # ENZYMES prefix
         # read_tu_data
         # name ['A', 'graph_indicator', 'graph_labels', 'node_attributes', 'node_labels']
         # edge_attributes edge_labels
@@ -85,15 +73,16 @@ class GCNDataset(InMemoryDataset):
         # remove_self_loops -> coalesce -> Data Data(x=[19580, 21], edge_index=[2, 74564], y=[600])
         # data, slices, sizes
         torch.save((self._data, self.slices, sizes), self.processed_paths[0])
-        #.\data\processed\data.pt
+        # .\data\processed\data.pt
 
     # def download(self):
     #     pass
 
 
-def get_loader(dataset):
-    torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, sampler=None, num_workers=0, drop_last=False)
-
-
 if __name__ == '__main__':
     dataset = GCNDataset(root='./')
+    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+    for idx, batch in enumerate(dataloader):
+        print(idx, batch)
+        print(batch.batch)
+        print(batch.num_graphs)

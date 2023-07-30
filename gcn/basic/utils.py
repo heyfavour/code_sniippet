@@ -20,6 +20,7 @@ def rsp():
     edge_index, edge_attr = coalesce(edge_index, edge_attr, num_nodes)
     print(edge_index)
 
+
 if __name__ == '__main__':
     #get_one_hot()
     rsp()
