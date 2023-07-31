@@ -43,7 +43,7 @@ def cora_train():
 
 
 def graph_classification():
-    #GCN GCN GAT 准确率可上70
+    #GCN GCN GAT 准确率可上90 也不知道代码对不对 困惑
     class GCN(torch.nn.Module):
         def __init__(self):
             super().__init__()
@@ -71,7 +71,7 @@ def graph_classification():
             return x
 
     dataset = TUDataset(root='./data', name='ENZYMES')  # 600
-    train_dataset, valid_dataset = random_split(dataset, [540, 60])
+    train_dataset, valid_dataset = random_split(dataset, [480, 120])
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
     valid_loader = DataLoader(valid_dataset, batch_size=120, shuffle=False)
     model = GCN()
