@@ -43,7 +43,7 @@ def cora_train():
 
 
 def graph_classification():
-    #GCN GCN GAT 准确率可上90
+    #GCN GCN GAT 准确率可上70
     class GCN(torch.nn.Module):
         def __init__(self):
             super().__init__()
