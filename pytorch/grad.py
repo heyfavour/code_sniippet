@@ -1,7 +1,8 @@
 import torch
 from torch import autograd
 
-#自动微分
+
+# 自动微分
 def grad_demo_1():
     # 变量围绕tensor对象
     x = autograd.Variable(torch.Tensor([1., 2., 3]), requires_grad=True)
@@ -38,5 +39,20 @@ def grad_demo_2():
     print(y.grad)
 
 
+def grad_demo_3():
+    x1 = torch.tensor([1, 2, 3, 4, 5], dtype=torch.float32, requires_grad=True)
+    x2 = torch.tensor([1, 2, 3, 4, 5], dtype=torch.float32, requires_grad=True)
+    y = torch.tensor(0)
+
+    x3 = torch.zeros((2,))
+    x3[0] = torch.sum(x1[:3] * x2[:3])
+    x3[1] = torch.sum(x1[3:] * x2[3:])
+    x4 = torch.sum(x3)
+    loss = x4-y
+    loss.backward()
+    print(x1.grad)
+    print(x2.grad)
+
+
 if __name__ == '__main__':
-    grad_demo_2()
+    grad_demo_3()
