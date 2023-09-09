@@ -46,18 +46,19 @@ class Envelope(torch.nn.Module):
         x_pow_p0 = x.pow(p - 1)
         x_pow_p1 = x_pow_p0 * x
         x_pow_p2 = x_pow_p1 * x
+        #论文公式8 but why?
         return (1.0 / x + a * x_pow_p0 + b * x_pow_p1 +
                 c * x_pow_p2) * (x < 1.0).to(x.dtype)
 
 
 class BesselBasisLayer(torch.nn.Module):
     def __init__(self, num_radial: int, cutoff: float = 5.0, envelope_exponent: int = 5):
-        # 径向基函数个数, 截断, 平滑切割形状
+        # 球贝塞尔基(径向基函数个数 6 ,截断 5,平滑切割形状 5)
         super().__init__()
         self.cutoff = cutoff
         self.envelope = Envelope(envelope_exponent)
 
-        self.freq = torch.nn.Parameter(torch.Tensor(num_radial))
+        self.freq = torch.nn.Parameter(torch.Tensor(num_radial))# ->[1,num_radial][1,5]
 
         self.reset_parameters()
 
@@ -80,18 +81,16 @@ class SphericalBasisLayer(torch.nn.Module):
             envelope_exponent: int = 5,
     ):
         super().__init__()
+        # (球面谐波 7 径向基函数个数 6, 截断 5, 平滑切割形状 5)
         import sympy as sym
 
-        from torch_geometric.nn.models.dimenet_utils import (
-            bessel_basis,
-            real_sph_harm,
-        )
+        from .dimenet_utils import (bessel_basis,real_sph_harm,)
 
         assert num_radial <= 64
-        self.num_spherical = num_spherical
-        self.num_radial = num_radial
-        self.cutoff = cutoff
-        self.envelope = Envelope(envelope_exponent)
+        self.num_spherical = num_spherical#球面谐波 7
+        self.num_radial = num_radial#径向基函数 6
+        self.cutoff = cutoff#截断 5
+        self.envelope = Envelope(envelope_exponent)# 平滑切割形状 5
 
         bessel_forms = bessel_basis(num_spherical, num_radial)
         sph_harm_forms = real_sph_harm(num_spherical)
@@ -503,9 +502,8 @@ class DimeNet(torch.nn.Module):
         self.max_num_neighbors = max_num_neighbors  # 32 cutoff最大邻居数
         self.num_blocks = num_blocks  # block层数
 
-        self.rbf = BesselBasisLayer(num_radial, cutoff, envelope_exponent)  # 球贝塞尔基(径向基函数个数,截断,平滑切割形状)
-        self.sbf = SphericalBasisLayer(num_spherical, num_radial, cutoff,
-                                       envelope_exponent)
+        self.rbf = BesselBasisLayer(num_radial, cutoff, envelope_exponent)  # 球贝塞尔基(径向基函数个数 6 ,截断 5,平滑切割形状 5)
+        self.sbf = SphericalBasisLayer(num_spherical, num_radial, cutoff,envelope_exponent)#球谐函数 (球面谐波 7 径向基函数个数 6 ,截断 5,平滑切割形状 5)
 
         self.emb = EmbeddingBlock(num_radial, hidden_channels, act)
 
