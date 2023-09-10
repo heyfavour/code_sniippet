@@ -17,6 +17,10 @@ from torch_geometric.nn.resolver import activation_resolver  # 激活函数
 from torch_geometric.typing import OptTensor, SparseTensor
 from torch_geometric.utils import scatter
 
+import sympy as sym
+
+from dimenet_utils import bessel_basis, real_sph_harm
+
 qm9_target_dict: Dict[int, str] = {
     0: 'mu',
     1: 'alpha',
@@ -34,21 +38,20 @@ qm9_target_dict: Dict[int, str] = {
 
 class Envelope(torch.nn.Module):
     def __init__(self, exponent: int):
-        #平滑切割形状
+        # 平滑切割形状
         super().__init__()
-        self.p = exponent + 1 #6
-        self.a = -(self.p + 1) * (self.p + 2) / 2#-28
-        self.b = self.p * (self.p + 2)#48
-        self.c = -self.p * (self.p + 1) / 2#21
+        self.p = exponent + 1  # 6
+        self.a = -(self.p + 1) * (self.p + 2) / 2  # -28
+        self.b = self.p * (self.p + 2)  # 48
+        self.c = -self.p * (self.p + 1) / 2  # 21
 
     def forward(self, x: Tensor) -> Tensor:
         p, a, b, c = self.p, self.a, self.b, self.c
         x_pow_p0 = x.pow(p - 1)
         x_pow_p1 = x_pow_p0 * x
         x_pow_p2 = x_pow_p1 * x
-        #论文公式8 but why?
-        return (1.0 / x + a * x_pow_p0 + b * x_pow_p1 +
-                c * x_pow_p2) * (x < 1.0).to(x.dtype)
+        # 论文公式8 but why?
+        return (1.0 / x + a * x_pow_p0 + b * x_pow_p1 + c * x_pow_p2) * (x < 1.0).to(x.dtype)
 
 
 class BesselBasisLayer(torch.nn.Module):
@@ -57,8 +60,7 @@ class BesselBasisLayer(torch.nn.Module):
         super().__init__()
         self.cutoff = cutoff
         self.envelope = Envelope(envelope_exponent)
-
-        self.freq = torch.nn.Parameter(torch.Tensor(num_radial))# ->[1,num_radial][1,5]
+        self.freq = torch.nn.Parameter(torch.Tensor(num_radial))  # ->[1,num_radial][1,5]
 
         self.reset_parameters()
 
@@ -82,24 +84,24 @@ class SphericalBasisLayer(torch.nn.Module):
     ):
         super().__init__()
         # (球面谐波 7 径向基函数个数 6, 截断 5, 平滑切割形状 5)
-        import sympy as sym
-
-        from .dimenet_utils import (bessel_basis,real_sph_harm,)
 
         assert num_radial <= 64
-        self.num_spherical = num_spherical#球面谐波 7
-        self.num_radial = num_radial#径向基函数 6
-        self.cutoff = cutoff#截断 5
-        self.envelope = Envelope(envelope_exponent)# 平滑切割形状 5
-
+        self.num_spherical = num_spherical  # 球面谐波 7
+        self.num_radial = num_radial  # 径向基函数 6
+        self.cutoff = cutoff  # 截断 5
+        self.envelope = Envelope(envelope_exponent)  # 平滑切割形状 5
+        # bess_basis n行j列的矩阵  行是函数的阶数  列是系数不同的函数方程
         bessel_forms = bessel_basis(num_spherical, num_radial)
+        # 返回一个 1 3 5 7 ... num_spherical  n行 每列第一个是归一化的勒让德多项式
         sph_harm_forms = real_sph_harm(num_spherical)
         self.sph_funcs = []
         self.bessel_funcs = []
-
+        print(bessel_forms)
+        print(sph_harm_forms)
         x, theta = sym.symbols('x theta')
         modules = {'sin': torch.sin, 'cos': torch.cos}
-        for i in range(num_spherical):
+        for i in range(num_spherical):  # 遍历阶数
+            #self.sph_funcs 勒让德多项式函数 0阶需要特殊处理因为他是一个数
             if i == 0:
                 sph1 = sym.lambdify([theta], sph_harm_forms[i][0], modules)(0)
                 self.sph_funcs.append(lambda x: torch.zeros_like(x) + sph1)
@@ -109,6 +111,7 @@ class SphericalBasisLayer(torch.nn.Module):
             for j in range(num_radial):
                 bessel = sym.lambdify([x], bessel_forms[i][j], modules)
                 self.bessel_funcs.append(bessel)
+
 
     def forward(self, dist: Tensor, angle: Tensor, idx_kj: Tensor) -> Tensor:
         dist = dist / self.cutoff
@@ -501,9 +504,12 @@ class DimeNet(torch.nn.Module):
         self.cutoff = cutoff  # 截断 5.0
         self.max_num_neighbors = max_num_neighbors  # 32 cutoff最大邻居数
         self.num_blocks = num_blocks  # block层数
-
-        self.rbf = BesselBasisLayer(num_radial, cutoff, envelope_exponent)  # 球贝塞尔基(径向基函数个数 6 ,截断 5,平滑切割形状 5)
-        self.sbf = SphericalBasisLayer(num_spherical, num_radial, cutoff,envelope_exponent)#球谐函数 (球面谐波 7 径向基函数个数 6 ,截断 5,平滑切割形状 5)
+        # 球贝塞尔基(径向基函数个数 6 ,截断 5,平滑切割形状 5)
+        # self.envelope(dist) = (1.0 / x + a * x_pow_p0 + b * x_pow_p1 + c * x_pow_p2) * (x < 1.0)
+        # self.envelope(dist) * (W(envelope_exponent) * dist).sin()
+        self.rbf = BesselBasisLayer(num_radial, cutoff, envelope_exponent)
+        # 球谐函数 (球面谐波 7 径向基函数个数 6 ,截断 5,平滑切割形状 5)
+        self.sbf = SphericalBasisLayer(num_spherical, num_radial, cutoff, envelope_exponent)
 
         self.emb = EmbeddingBlock(num_radial, hidden_channels, act)
 
@@ -912,4 +918,4 @@ class DimeNetPlusPlus(DimeNet):
 
 
 if __name__ == '__main__':
-    model = DimeNet(hidden_channels=128,out_channels=1,num_blocks=6,num_bilinear=8,num_spherical=7,num_radial=6)
+    model = DimeNet(hidden_channels=128, out_channels=1, num_blocks=6, num_bilinear=8, num_spherical=7, num_radial=6)
