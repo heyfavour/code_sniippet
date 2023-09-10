@@ -18,6 +18,7 @@ from torch_geometric.typing import OptTensor, SparseTensor
 from torch_geometric.utils import scatter
 
 import sympy as sym
+import tensorflow as tf
 
 from dimenet_utils import bessel_basis, real_sph_harm
 
@@ -96,22 +97,22 @@ class SphericalBasisLayer(torch.nn.Module):
         sph_harm_forms = real_sph_harm(num_spherical)
         self.sph_funcs = []
         self.bessel_funcs = []
-        print(bessel_forms)
-        print(sph_harm_forms)
         x, theta = sym.symbols('x theta')
         modules = {'sin': torch.sin, 'cos': torch.cos}
         for i in range(num_spherical):  # 遍历阶数
-            #self.sph_funcs 勒让德多项式函数 0阶需要特殊处理因为他是一个数
+            # self.sph_funcs 勒让德多项式函数 0阶需要特殊处理因为他是一个数
+            # n个球谐函数
             if i == 0:
                 sph1 = sym.lambdify([theta], sph_harm_forms[i][0], modules)(0)
                 self.sph_funcs.append(lambda x: torch.zeros_like(x) + sph1)
             else:
                 sph = sym.lambdify([theta], sph_harm_forms[i][0], modules)
                 self.sph_funcs.append(sph)
+            # bessel_funcs
+            # n*k = bessel_funcs*num_radial 个贝塞尔函数
             for j in range(num_radial):
                 bessel = sym.lambdify([x], bessel_forms[i][j], modules)
                 self.bessel_funcs.append(bessel)
-
 
     def forward(self, dist: Tensor, angle: Tensor, idx_kj: Tensor) -> Tensor:
         dist = dist / self.cutoff
@@ -188,8 +189,7 @@ class InteractionBlock(torch.nn.Module):
         self.lin_kj = Linear(hidden_channels, hidden_channels)
         self.lin_ji = Linear(hidden_channels, hidden_channels)
 
-        self.W = torch.nn.Parameter(
-            torch.Tensor(hidden_channels, num_bilinear, hidden_channels))
+        self.W = torch.nn.Parameter(torch.Tensor(hidden_channels, num_bilinear, hidden_channels))
 
         self.layers_before_skip = torch.nn.ModuleList([
             ResidualLayer(hidden_channels, act) for _ in range(num_before_skip)
@@ -360,8 +360,7 @@ class OutputBlock(torch.nn.Module):
             lin.bias.data.fill_(0)
         self.lin.weight.data.fill_(0)
 
-    def forward(self, x: Tensor, rbf: Tensor, i: Tensor,
-                num_nodes: Optional[int] = None) -> Tensor:
+    def forward(self, x: Tensor, rbf: Tensor, i: Tensor, num_nodes: Optional[int] = None) -> Tensor:
         x = self.lin_rbf(rbf) * x
         x = scatter(x, i, dim=0, dim_size=num_nodes, reduce='sum')
         for lin in self.lins:
@@ -509,13 +508,15 @@ class DimeNet(torch.nn.Module):
         # self.envelope(dist) * (W(envelope_exponent) * dist).sin()
         self.rbf = BesselBasisLayer(num_radial, cutoff, envelope_exponent)
         # 球谐函数 (球面谐波 7 径向基函数个数 6 ,截断 5,平滑切割形状 5)
+        #  self.sph_funcs n个球谐函数
+        #  self.bessel_funcs n*k个 贝塞尔函数
         self.sbf = SphericalBasisLayer(num_spherical, num_radial, cutoff, envelope_exponent)
 
         self.emb = EmbeddingBlock(num_radial, hidden_channels, act)
 
         self.output_blocks = torch.nn.ModuleList([
-            OutputBlock(num_radial, hidden_channels, out_channels,
-                        num_output_layers, act) for _ in range(num_blocks + 1)
+            OutputBlock(num_radial, hidden_channels, out_channels, num_output_layers, act) for _ in
+            range(num_blocks + 1)
         ])
 
         self.interaction_blocks = torch.nn.ModuleList([
@@ -550,8 +551,6 @@ class DimeNet(torch.nn.Module):
         :class:`~torch_geometric.datasets.QM9` dataset, trained on the
         specified target :obj:`target`."""
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        import tensorflow as tf
-
         assert target >= 0 and target <= 12 and not target == 4
 
         root = osp.expanduser(osp.normpath(root))
@@ -809,7 +808,6 @@ class DimeNetPlusPlus(DimeNet):
         :class:`~torch_geometric.datasets.QM9` dataset, trained on the
         specified target :obj:`target`."""
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        import tensorflow as tf
 
         assert target >= 0 and target <= 12 and not target == 4
 
