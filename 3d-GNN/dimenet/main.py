@@ -1,43 +1,57 @@
+import datetime
+import random
 import torch
 import torch.optim as optim
+import numpy as np
 
-from model import SchNet
+from model import DimeNet
 from load_data import QM9_dataloader
 
+def set_seed(seed=1):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 if __name__ == '__main__':
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("cpu")
-    train_loader, valid_loader, train_count,valid_count = QM9_dataloader()
-    model = SchNet(cutoff=3,num_layers=1).to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=0.001)
+    set_seed(99)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    train_loader, valid_loader, train_count, valid_count = QM9_dataloader()
+    model = DimeNet(
+        hidden_channels=128,
+        out_channels=1,
+        num_blocks=6,
+        num_bilinear=8,
+        num_spherical=7,
+        num_radial=6,
+        cutoff=5.0,
+        envelope_exponent=5,
+        num_before_skip=1,
+        num_after_skip=2,
+        num_output_layers=3,
+    ).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
     criterion = torch.nn.L1Loss()
 
     model.train()
-    for epoch in range(10000):
+    for epoch in range(1):
         epoch_loss = 0
-        for idx, batch in enumerate(train_loader):
-            batch.to(device)
+        start_time = datetime.datetime.now()
+        for idx, data in enumerate(train_loader):
+            batch_start_time = datetime.datetime.now()
+            data.to(device)
             optimizer.zero_grad()
-            out = model(batch)  # [bs,1]
-            y = torch.reshape(batch.y[:, 4], (-1, 1))
+            out = model(data.z, data.pos, data.batch)  # [bs,1]
+            y = torch.reshape(data.y[:, 3], (-1, 1))
             loss = criterion(out, y)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
             optimizer.step()
+            batch_end_time = datetime.datetime.now()
+            batch_use_time = batch_end_time-batch_start_time
+            print(f"[BATCH]:{idx} [batch_use_time]:{batch_use_time}")
             break
-        break
-        #     epoch_loss += loss.item() * batch.num_graphs
-        #     if idx % 10 == 0:
-        #         info = f"[epoch:{epoch:>4d}] loss:{loss.item()}]"
-        #         print(info)
-        # print(f"[EPOCH] loss:{epoch_loss / train_count}]")
-        # model.eval()
-        # with torch.no_grad():
-        #     epoch_loss = 0
-        #     for idx, batch in enumerate(valid_loader):
-        #         batch.to(device)
-        #         out = model(batch)  # [bs,1]
-        #         y = torch.reshape(batch.y[:, 4], (-1, 1))
-        #         loss = criterion(out, y)
-        #         epoch_loss += loss.item() * batch.num_graphs
-        # print(f"[VALID] loss:{epoch_loss / valid_count}]")
+        end_time = datetime.datetime.now()
+        use_time = end_time-start_time
+        print(f"[use_time]:{use_time}")
+
