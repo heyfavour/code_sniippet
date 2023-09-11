@@ -96,14 +96,19 @@ class SphericalBasisLayer(torch.nn.Module):
                 self.bessel_funcs.append(bessel)
 
     def forward(self, dist: Tensor, angle: Tensor, idx_kj: Tensor) -> Tensor:
+        # 距离 角度 边索引
         dist = dist / self.cutoff
-        rbf = torch.stack([f(dist) for f in self.bessel_funcs], dim=1)
-        rbf = self.envelope(dist).unsqueeze(-1) * rbf
+        #self.bessel_funcs->n*k个bessel_funcs 42个
+        #rbf对距离进行贝塞尔展开
+        rbf = torch.stack([f(dist) for f in self.bessel_funcs], dim=1)#[边数 n*k=42]
+        # 距离平滑系数*[边数 42]
+        rbf = self.envelope(dist).unsqueeze(-1) * rbf#->[边数 n*k]
+        cbf = torch.stack([f(angle) for f in self.sph_funcs], dim=1)#[ijk角 球谐函数展开][ijk 7]
 
-        cbf = torch.stack([f(angle) for f in self.sph_funcs], dim=1)
-
-        n, k = self.num_spherical, self.num_radial
-        out = (rbf[idx_kj].view(-1, n, k) * cbf.view(-1, n, 1)).view(-1, n * k)
+        n, k = self.num_spherical, self.num_radial#6 7
+        #kj边
+        #贝塞尔处理的边*球谐函数处理的角度  ijk每行都处理
+        out = (rbf[idx_kj].view(-1, n, k) * cbf.view(-1, n, 1)).view(-1, n * k)#->[ijk n*k]
         return out
 
 

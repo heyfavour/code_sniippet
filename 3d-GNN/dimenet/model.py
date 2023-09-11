@@ -1,3 +1,5 @@
+import datetime
+
 from model_block import *
 
 from typing import Callable, Union
@@ -73,7 +75,7 @@ class DimeNet(torch.nn.Module):
         # 球谐函数 (球面谐波 7 径向基函数个数 6 ,截断 5,平滑切割形状 5)
         #  self.sph_funcs n个球谐函数
         #  self.bessel_funcs n*k个 贝塞尔函数
-        self.sbf = SphericalBasisLayer(num_spherical, num_radial, cutoff, envelope_exponent)
+        self.sbf = SphericalBasisLayer(num_spherical, num_radial, cutoff, envelope_exponent)#->[ijk 42]
 
         self.emb = EmbeddingBlock(num_radial, hidden_channels, act)
 
@@ -104,6 +106,7 @@ class DimeNet(torch.nn.Module):
             interaction.reset_parameters()
 
     def forward(self, z: Tensor, pos: Tensor, batch: OptTensor = None) -> Tensor:
+        start_time = datetime.datetime.now()
         # pos cutoff 32  ->[2 N]
         # 按照batch新edge_index 取最近的32个
         edge_index = radius_graph(pos, r=self.cutoff, batch=batch, max_num_neighbors=self.max_num_neighbors)
@@ -120,10 +123,11 @@ class DimeNet(torch.nn.Module):
         b = torch.cross(pos_ji, pos_ki).norm(dim=-1)#叉积求模
         angle = torch.atan2(b, a)#每个ijk的弧度
         rbf = self.rbf(dist)#ij距离->[边,6] 每条边的距离
-        sbf = self.sbf(dist, angle, idx_kj)#ij距离 ijk角度 jk边索引
+        sbf = self.sbf(dist, angle, idx_kj)#ij距离 ijk角度 jk边索引->[ijk n*k]
+        #1.3s 0.75s
 
         # Embedding block.
-        x = self.emb(z, rbf, i, j)
+        x = self.emb(z, rbf, i, j)#原子 边 row col
         P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
 
         # Interaction blocks.
@@ -131,7 +135,7 @@ class DimeNet(torch.nn.Module):
                                                    self.output_blocks[1:]):
             x = interaction_block(x, rbf, sbf, idx_kj, idx_ji)
             P = P + output_block(x, rbf, i, num_nodes=pos.size(0))
-
+        #1.3s 0.55
         if batch is None:
             return P.sum(dim=0)
         else:
