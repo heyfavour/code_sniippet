@@ -129,9 +129,10 @@ class EmbeddingBlock(torch.nn.Module):
         self.lin.reset_parameters()
 
     def forward(self, x: Tensor, rbf: Tensor, i: Tensor, j: Tensor) -> Tensor:
-        x = self.emb(x)
-        rbf = self.act(self.lin_rbf(rbf))
-        return self.act(self.lin(torch.cat([x[i], x[j], rbf], dim=-1)))
+        #原子 [边,6] row col
+        x = self.emb(x)#[num_nodes 1]->[num_nodes 128] 原子信息
+        rbf = self.act(self.lin_rbf(rbf))#[边,6]->[边,128]
+        return self.act(self.lin(torch.cat([x[i], x[j], rbf], dim=-1)))#A原子 B原子 距离
 
 
 class ResidualLayer(torch.nn.Module):
@@ -168,8 +169,7 @@ class InteractionBlock(torch.nn.Module):
         self.act = act
 
         self.lin_rbf = Linear(num_radial, hidden_channels, bias=False)
-        self.lin_sbf = Linear(num_spherical * num_radial, num_bilinear,
-                              bias=False)
+        self.lin_sbf = Linear(num_spherical * num_radial, num_bilinear,bias=False)
 
         # Dense transformations of input messages.
         self.lin_kj = Linear(hidden_channels, hidden_channels)
@@ -202,17 +202,18 @@ class InteractionBlock(torch.nn.Module):
         for res_layer in self.layers_after_skip:
             res_layer.reset_parameters()
 
-    def forward(self, x: Tensor, rbf: Tensor, sbf: Tensor, idx_kj: Tensor,
-                idx_ji: Tensor) -> Tensor:
+    def forward(self, x: Tensor, rbf: Tensor, sbf: Tensor, idx_kj: Tensor,idx_ji: Tensor) -> Tensor:
         rbf = self.lin_rbf(rbf)
         sbf = self.lin_sbf(sbf)
-
         x_ji = self.act(self.lin_ji(x))
         x_kj = self.act(self.lin_kj(x))
         x_kj = x_kj * rbf
-        x_kj = torch.einsum('wj,wl,ijl->wi', sbf, x_kj[idx_kj], self.W)
+        # x_kj[0][1] = a[0][j] * b[0][l] * W[0][j][l]
+        # [三体,128] [三体,距离+角度]
+        x_kj = torch.einsum('wj,wl,ijl->wi', sbf, x_kj[idx_kj], self.W)#[三体,8][三体 128] 【128 8 128]
+        # 把三体的信息按照两体聚合
         x_kj = scatter(x_kj, idx_ji, dim=0, dim_size=x.size(0), reduce='sum')
-
+        #h = 两体+三体
         h = x_ji + x_kj
         for layer in self.layers_before_skip:
             h = layer(h)
@@ -347,11 +348,12 @@ class OutputBlock(torch.nn.Module):
         self.lin.weight.data.fill_(0)
 
     def forward(self, x: Tensor, rbf: Tensor, i: Tensor, num_nodes: Optional[int] = None) -> Tensor:
-        x = self.lin_rbf(rbf) * x
-        x = scatter(x, i, dim=0, dim_size=num_nodes, reduce='sum')
+        # x i+j+r 128 rbf r i i num_nums 原子个数
+        x = self.lin_rbf(rbf) * x #[两体 128]
+        x = scatter(x, i, dim=0, dim_size=num_nodes, reduce='sum')#[单体 128]
         for lin in self.lins:
             x = self.act(lin(x))
-        return self.lin(x)
+        return self.lin(x)#[单体 1]
 
 
 class OutputPPBlock(torch.nn.Module):

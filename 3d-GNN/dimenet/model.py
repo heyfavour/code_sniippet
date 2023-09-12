@@ -80,8 +80,7 @@ class DimeNet(torch.nn.Module):
         self.emb = EmbeddingBlock(num_radial, hidden_channels, act)
 
         self.output_blocks = torch.nn.ModuleList([
-            OutputBlock(num_radial, hidden_channels, out_channels, num_output_layers, act) for _ in
-            range(num_blocks + 1)
+            OutputBlock(num_radial, hidden_channels, out_channels, num_output_layers, act) for _ in range(num_blocks + 1)
         ])
 
         self.interaction_blocks = torch.nn.ModuleList([
@@ -127,12 +126,10 @@ class DimeNet(torch.nn.Module):
         #1.3s 0.75s
 
         # Embedding block.
-        x = self.emb(z, rbf, i, j)#原子 边 row col
-        P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
-
+        x = self.emb(z, rbf, i, j)#原子 [边,6] row col
+        P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))#[单体 1] 1含有 ijk的信息
         # Interaction blocks.
-        for interaction_block, output_block in zip(self.interaction_blocks,
-                                                   self.output_blocks[1:]):
+        for interaction_block, output_block in zip(self.interaction_blocks,self.output_blocks[1:]):
             x = interaction_block(x, rbf, sbf, idx_kj, idx_ji)
             P = P + output_block(x, rbf, i, num_nodes=pos.size(0))
         #1.3s 0.55
