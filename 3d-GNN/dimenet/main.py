@@ -48,10 +48,7 @@ if __name__ == '__main__':
         num_after_skip=2,
         num_output_layers=3,
     ).to(device)
-    learning_rate =  0.001
-    eps = 1e-7
-    weight_decay =  0.000002
-    optimizer = optim.AdamW(model.parameters(), lr=learning_rate,eps=eps,weight_decay=weight_decay)
+    optimizer = optim.AdamW(model.parameters(), lr=0.001)
     warmup_steps = 4000
     decay_steps = 4500000
     decay_rate = 0.01
