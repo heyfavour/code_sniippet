@@ -6,7 +6,7 @@ import numpy as np
 
 from model import DimeNet, DimeNetPlusPlus
 from load_data import QM9_dataloader
-
+from schedules import LinearWarmupExponentialDecay
 
 def set_seed(seed=1):
     random.seed(seed)
@@ -48,7 +48,15 @@ if __name__ == '__main__':
         num_after_skip=2,
         num_output_layers=3,
     ).to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=0.001,eps=1e-7,weight_decay=0.000002)
+    learning_rate =  0.001
+    eps = 1e-7
+    weight_decay =  0.000002
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate,eps=eps,weight_decay=weight_decay)
+    warmup_steps = 4000
+    decay_steps = 4500000
+    decay_rate = 0.01
+    staircase = False
+    scheduler = LinearWarmupExponentialDecay(optimizer,  warmup_steps, decay_steps, decay_rate, staircase)
     criterion = torch.nn.L1Loss()
 
     model.train()
