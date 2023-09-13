@@ -75,12 +75,13 @@ class DimeNet(torch.nn.Module):
         # 球谐函数 (球面谐波 7 径向基函数个数 6 ,截断 5,平滑切割形状 5)
         #  self.sph_funcs n个球谐函数
         #  self.bessel_funcs n*k个 贝塞尔函数
-        self.sbf = SphericalBasisLayer(num_spherical, num_radial, cutoff, envelope_exponent)#->[ijk 42]
+        self.sbf = SphericalBasisLayer(num_spherical, num_radial, cutoff, envelope_exponent)  # ->[ijk 42]
 
         self.emb = EmbeddingBlock(num_radial, hidden_channels, act)
 
         self.output_blocks = torch.nn.ModuleList([
-            OutputBlock(num_radial, hidden_channels, out_channels, num_output_layers, act) for _ in range(num_blocks + 1)
+            OutputBlock(num_radial, hidden_channels, out_channels, num_output_layers, act) for _ in
+            range(num_blocks + 1)
         ])
 
         self.interaction_blocks = torch.nn.ModuleList([
@@ -105,12 +106,12 @@ class DimeNet(torch.nn.Module):
             interaction.reset_parameters()
 
     def forward(self, z: Tensor, pos: Tensor, batch: OptTensor = None) -> Tensor:
-        start_time = datetime.datetime.now()
         # pos cutoff 32  ->[2 N]
         # 按照batch新edge_index 取最近的32个
+        # souce->target target是中心节点
         edge_index = radius_graph(pos, r=self.cutoff, batch=batch, max_num_neighbors=self.max_num_neighbors)
         # i 原子  j 原子  idx_i 三体的i idx_j 三体的j idx_k 三体的k  idx_kj kj的边索引 ji的边索引
-        i, j, idx_i, idx_j, idx_k, idx_kj, idx_ji = triplets(edge_index, num_nodes=z.size(0))#
+        i, j, idx_i, idx_j, idx_k, idx_kj, idx_ji = triplets(edge_index, num_nodes=z.size(0))  #
 
         # Calculate distances.
         dist = (pos[i] - pos[j]).pow(2).sum(dim=-1).sqrt()
@@ -118,21 +119,21 @@ class DimeNet(torch.nn.Module):
         # Calculate angles.
         pos_i = pos[idx_i]
         pos_ji, pos_ki = pos[idx_j] - pos_i, pos[idx_k] - pos_i
-        a = (pos_ji * pos_ki).sum(dim=-1)#向量点积求和
-        b = torch.cross(pos_ji, pos_ki).norm(dim=-1)#叉积求模
-        angle = torch.atan2(b, a)#每个ijk的弧度
-        rbf = self.rbf(dist)#ij距离->[边,6] 每条边的距离
-        sbf = self.sbf(dist, angle, idx_kj)#ij距离 ijk角度 jk边索引->[ijk n*k]
-        #1.3s 0.75s
+        a = (pos_ji * pos_ki).sum(dim=-1)  # 向量点积求和
+        b = torch.cross(pos_ji, pos_ki).norm(dim=-1)  # 叉积求模
+        angle = torch.atan2(b, a)  # 每个ijk的弧度
+        rbf = self.rbf(dist)  # ij距离->[边,6] 每条边的距离
+        sbf = self.sbf(dist, angle, idx_kj)  # ij距离 ijk角度 jk边索引->[ijk n*k]
+        # 1.3s 0.75s
 
         # Embedding block.
-        x = self.emb(z, rbf, i, j)#原子 [边,6] row col
-        P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))#[单体 1] 1含有 ijk的信息
+        x = self.emb(z, rbf, i, j)  # 原子 [边,6] row col
+        P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))  # [单体 1] 1含有 ijk的信息
         # Interaction blocks.
-        for interaction_block, output_block in zip(self.interaction_blocks,self.output_blocks[1:]):
+        for interaction_block, output_block in zip(self.interaction_blocks, self.output_blocks[1:]):
             x = interaction_block(x, rbf, sbf, idx_kj, idx_ji)
             P = P + output_block(x, rbf, i, num_nodes=pos.size(0))
-        #1.3s 0.55
+        # 1.3s 0.55
         if batch is None:
             return P.sum(dim=0)
         else:
@@ -219,24 +220,24 @@ class DimeNetPlusPlus(DimeNet):
         # solely in the `OutputBlock` of DimeNet:
         self.output_blocks = torch.nn.ModuleList([
             OutputPPBlock(
-                num_radial,
-                hidden_channels,
-                out_emb_channels,
-                out_channels,
-                num_output_layers,
+                num_radial,  # 7
+                hidden_channels,  # 128
+                out_emb_channels,  # 256
+                out_channels,  # 1
+                num_output_layers,  # 3
                 act,
             ) for _ in range(num_blocks + 1)
         ])
 
         self.interaction_blocks = torch.nn.ModuleList([
             InteractionPPBlock(
-                hidden_channels,
-                int_emb_size,
-                basis_emb_size,
-                num_spherical,
-                num_radial,
-                num_before_skip,
-                num_after_skip,
+                hidden_channels,  # 128
+                int_emb_size,  # 64
+                basis_emb_size,  # 8
+                num_spherical,  # 7
+                num_radial,  # 6
+                num_before_skip,  # 1
+                num_after_skip,  # 2
                 act,
             ) for _ in range(num_blocks)
         ])

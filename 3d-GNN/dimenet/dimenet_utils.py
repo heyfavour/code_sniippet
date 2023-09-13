@@ -90,6 +90,7 @@ def sph_harm_prefactor(k, m):
 def associated_legendre_polynomials(k, zero_m_only=True):
     # https://zhuanlan.zhihu.com/p/562322945
     # 计算关联勒让德多项式
+    # 勒让德多项式构成了球坐标下的拉普拉斯方程的解，并且相互正交
     z = sym.symbols('z')  # 角度变量，通常在球坐标系中表示为余纬度
     P_l_m = [[0] * (j + 1) for j in range(k)]  # 用于存储关联勒让德多项式的值
 

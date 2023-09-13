@@ -105,7 +105,7 @@ class SphericalBasisLayer(torch.nn.Module):
         rbf = self.envelope(dist).unsqueeze(-1) * rbf#->[边数 n*k]
         cbf = torch.stack([f(angle) for f in self.sph_funcs], dim=1)#[ijk角 球谐函数展开][ijk 7]
 
-        n, k = self.num_spherical, self.num_radial#6 7
+        n, k = self.num_spherical, self.num_radial#7 6
         #kj边
         #贝塞尔处理的边*球谐函数处理的角度  ijk每行都处理
         out = (rbf[idx_kj].view(-1, n, k) * cbf.view(-1, n, 1)).view(-1, n * k)#->[ijk n*k]
@@ -243,8 +243,7 @@ class InteractionPPBlock(torch.nn.Module):
         self.lin_rbf1 = Linear(num_radial, basis_emb_size, bias=False)
         self.lin_rbf2 = Linear(basis_emb_size, hidden_channels, bias=False)
 
-        self.lin_sbf1 = Linear(num_spherical * num_radial, basis_emb_size,
-                               bias=False)
+        self.lin_sbf1 = Linear(num_spherical * num_radial, basis_emb_size, bias=False)
         self.lin_sbf2 = Linear(basis_emb_size, int_emb_size, bias=False)
 
         # Hidden transformation of input message:
@@ -388,8 +387,7 @@ class OutputPPBlock(torch.nn.Module):
             lin.bias.data.fill_(0)
         self.lin.weight.data.fill_(0)
 
-    def forward(self, x: Tensor, rbf: Tensor, i: Tensor,
-                num_nodes: Optional[int] = None) -> Tensor:
+    def forward(self, x: Tensor, rbf: Tensor, i: Tensor, num_nodes: Optional[int] = None) -> Tensor:
         x = self.lin_rbf(rbf) * x
         x = scatter(x, i, dim=0, dim_size=num_nodes, reduce='sum')
         x = self.lin_up(x)
@@ -402,11 +400,10 @@ def triplets(edge_index: Tensor, num_nodes: int) -> Tuple[Tensor, Tensor, Tensor
     # 0 1 2 3 4 5...len(row)
     value = torch.arange(row.size(0), device=row.device)
     # adj_t 还是edge_indx 但是to_dense() 是一个num_nodes*num_nodes 值是value 的邻接矩阵
-    # 注意此处是无向图
-    adj_t = SparseTensor(row=col, col=row, value=value, sparse_sizes=(num_nodes, num_nodes))  # num_nodes行 num_nodes列
+    adj_t = SparseTensor(row=col, col=row, value=value, sparse_sizes=(num_nodes, num_nodes))  # 19*19
     # 返回一个邻接矩阵，但是行是row列还是num_nodes -> 每个键连关系的邻居value
     # 计算每个edge_index的node的连接数
-    adj_t_row = adj_t[row]  # [row num_nodes]
+    adj_t_row = adj_t[row]  # 二体 *19
     # 计算每个edge_index的node的连接数 [row]
     num_triplets = adj_t_row.set_value(None).sum(dim=1).to(torch.long)
     # Node indices (k->j->i) for triplets.
