@@ -16,7 +16,7 @@ def same_seeds(seed):
     random.seed(seed)
     np.random.seed(seed)  # Numpy module.初始化种子保持一致
     torch.manual_seed(seed)  # 初始化种子保持一致
-    if torch.cuda.is_available(): torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 
 if __name__ == '__main__':
