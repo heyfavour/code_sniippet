@@ -6,8 +6,7 @@ from torch import nn
 from torch_cluster import radius_graph
 from torch_scatter import scatter, scatter_min
 
-from math_utils import angle_emb, torsion_emb
-
+from model_block import angle_emb, torsion_emb, swish, EmbeddingBlock, SimpleInteractionBlock, Linear
 
 
 class ComENet(nn.Module):
@@ -48,7 +47,7 @@ class ComENet(nn.Module):
         self.feature1 = torsion_emb(num_radial=num_radial, num_spherical=num_spherical, cutoff=cutoff)
         self.feature2 = angle_emb(num_radial=num_radial, num_spherical=num_spherical, cutoff=cutoff)
 
-        self.emb = EmbeddingBlock(hidden_channels, act)
+        self.emb = EmbeddingBlock(hidden_channels, act)  # 256 swish
 
         self.interaction_blocks = torch.nn.ModuleList(
             [
@@ -80,14 +79,11 @@ class ComENet(nn.Module):
         self.lin_out.reset_parameters()
 
     def _forward(self, data):
-        batch = data.batch
-        z = data.z.long()
-        pos = data.pos
+        z, pos, batch = data.z.long(), data.pos, data.batch  # 21
         num_nodes = z.size(0)
 
         edge_index = radius_graph(pos, r=self.cutoff, batch=batch)
-        j, i = edge_index
-
+        j, i = edge_index  # 402
         vecs = pos[j] - pos[i]
         dist = vecs.norm(dim=-1)
 
@@ -95,16 +91,17 @@ class ComENet(nn.Module):
         x = self.emb(z)
 
         # Calculate distances.
-        _, argmin0 = scatter_min(dist, i, dim_size=num_nodes)
-        argmin0[argmin0 >= len(i)] = 0
-        n0 = j[argmin0]
+        _, argmin0 = scatter_min(dist, i, dim_size=num_nodes)  # 返回每个节点最近的原子索引
+        argmin0[argmin0 >= len(i)] = 0  # 逻辑上不存在吧?
+        n0 = j[argmin0]  # 根据索引找到第一近原子
+        # 给最近的原子加上cutoff让去找第二近原子
         add = torch.zeros_like(dist).to(dist.device)
         add[argmin0] = self.cutoff
         dist1 = dist + add
 
         _, argmin1 = scatter_min(dist1, i, dim_size=num_nodes)
         argmin1[argmin1 >= len(i)] = 0
-        n1 = j[argmin1]
+        n1 = j[argmin1]  # 根据索引找到第二近原子
         # --------------------------------------------------------
 
         _, argmin0_j = scatter_min(dist, j, dim_size=num_nodes)
@@ -194,3 +191,7 @@ class ComENet(nn.Module):
 
     def forward(self, batch_data):
         return self._forward(batch_data)
+
+
+if __name__ == '__main__':
+    model = ComENet()
