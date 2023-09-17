@@ -152,26 +152,28 @@ class ComENet(nn.Module):
             vecs, vecs[argmin0][i], vecs[argmin1][i], vecs[idx_iref], vecs[idx_jref]
         )
         # pos_ji j-i 的距离向量
-        # pos_in0 j-i 距离向量 j-i  i 最近的向量 i-k 边最近的向量
-        # pos_in1 j-i 距离向量 j-i  j 最近的向量 j-k 边最近的向量
+        # pos_in0 j-i 距离向量 j-i  i 的第一近邻
+        # pos_in1 j-i 距离向量 j-i  i 的第二近邻
         # pos_iref j-i 距离向量 每条j-i i最近的原子的边向量
-        # pos_jref j-i 距离向量 每条j-i j最近的原子的边向量
+        # pos_jref_j j-i 距离向量 每条j-i j最近的原子的边向量
         # pos_in0 - pos_iref 区别 pos_iref 替换了最近是j的距离向量
-        # pos_in1 - pos_jref 区别 pos_jref 替换了最近是i的距离向量
+
 
 
 
         # Calculate angles.
-        a = ((-pos_ji) * pos_in0).sum(dim=-1)
+        a = ((-pos_ji) * pos_in0).sum(dim=-1)#-pos_ji i->j向量
         b = torch.cross(-pos_ji, pos_in0).norm(dim=-1)
-        theta = torch.atan2(b, a)
+        theta = torch.atan2(b, a)# ij和最近的原子弧度
         theta[theta < 0] = theta[theta < 0] + math.pi
+        # theta 是 ji i-第一近邻的弧度
 
         # Calculate torsions.
-        dist_ji = pos_ji.pow(2).sum(dim=-1).sqrt()
-        plane1 = torch.cross(-pos_ji, pos_in0)
-        plane2 = torch.cross(-pos_ji, pos_in1)
-        a = (plane1 * plane2).sum(dim=-1)  # cos_angle * |plane1| * |plane2|
+        dist_ji = pos_ji.pow(2).sum(dim=-1).sqrt()#每条边的长度
+        plane1 = torch.cross(-pos_ji, pos_in0)#每个邻居 和i第一近的原子叉积 i+j+n0 确认的平面 法向量  长度为面积
+        plane2 = torch.cross(-pos_ji, pos_in1)#每个邻居 和i第二近的原子叉积 i+j+n1 确认的平面 法向量  长度为面积
+        a = (plane1 * plane2).sum(dim=-1)  # cos_angle * |plane1| * |plane2| 两平面的法向量
+        # 在计算b时，乘以pos_ji是为了将法向量与边向量进行点乘。这样可以获得法向量在边向量方向上的投影长度，从而得到与边向量方向上的夹角。这样计算出的b可以与a相除，得到平面夹角的余弦值。
         b = (torch.cross(plane1, plane2) * pos_ji).sum(dim=-1) / dist_ji
         phi = torch.atan2(b, a)
         phi[phi < 0] = phi[phi < 0] + math.pi
@@ -179,6 +181,7 @@ class ComENet(nn.Module):
         # Calculate right torsions.
         plane1 = torch.cross(pos_ji, pos_jref_j)
         plane2 = torch.cross(pos_ji, pos_iref)
+
         a = (plane1 * plane2).sum(dim=-1)  # cos_angle * |plane1| * |plane2|
         b = (torch.cross(plane1, plane2) * pos_ji).sum(dim=-1) / dist_ji
         tau = torch.atan2(b, a)
