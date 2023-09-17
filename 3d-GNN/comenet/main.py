@@ -1,4 +1,4 @@
-import os, sys
+import sys
 import datetime
 import random
 import numpy as np
@@ -20,7 +20,7 @@ def set_seed(seed=1):
 
 
 if __name__ == '__main__':
-    set_seed(42)
+    set_seed(99)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_loader, valid_loader, train_count, valid_count = QM9_dataloader()
     model = ComENet(cutoff=5.0).to(device)
@@ -48,6 +48,7 @@ if __name__ == '__main__':
             steps += 1
             writer.add_scalar('lr', optimizer.param_groups[0]['lr'], steps)
             sys.exit(0)
+        sys.exit(0)
         print(f"[EPOCH]:{epoch} loss:{epoch_loss / train_count}] lr:{optimizer.param_groups[0]['lr']}")
         writer.add_scalar('train', epoch_loss / train_count, steps)
         end_time = datetime.datetime.now()
