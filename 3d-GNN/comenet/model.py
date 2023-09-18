@@ -106,7 +106,7 @@ class ComENet(nn.Module):
         n1 = j[argmin1]  # 根据索引找到第二近原子索引 [单体] 原子索引
         # --------------------------------------------------------
         # 邻居原子的第一近邻 第二近邻 为什么要找j？因为i的第一近邻可以是j但是j的第一近邻不一定是i
-        _, argmin0_j = scatter_min(dist, j, dim_size=num_nodes) # 返回每个邻居节点最近的边索引 argmin1 [单体] 边索引
+        _, argmin0_j = scatter_min(dist, j, dim_size=num_nodes)  # 返回每个邻居节点最近的边索引 argmin1 [单体] 边索引
         argmin0_j[argmin0_j >= len(j)] = 0
         n0_j = i[argmin0_j]
 
@@ -122,7 +122,7 @@ class ComENet(nn.Module):
         # ----------------------------------------------------------
         # 单体到边
         # n0, n1 for i
-        n0 = n0[i]# 每条边
+        n0 = n0[i]  # 每条边
         n1 = n1[i]
         # n0, n1 for j
         n0_j = n0_j[j]
@@ -157,36 +157,33 @@ class ComENet(nn.Module):
         # pos_iref   j-i 距离向量 每条j-i i 的第一近邻 参考系
         # pos_jref_j j-i 距离向量 每条j-i i 的第一近邻 参考系
 
-
-
-
         # Calculate angles.
-        a = ((-pos_ji) * pos_in0).sum(dim=-1)#-pos_ji i->j向量
+        a = ((-pos_ji) * pos_in0).sum(dim=-1)  # -pos_ji i->j向量
         b = torch.cross(-pos_ji, pos_in0).norm(dim=-1)
-        theta = torch.atan2(b, a)# ij和最近的原子弧度 确认得是弧度平面
+        theta = torch.atan2(b, a)  # ij和最近的原子弧度 确认得是弧度平面
         theta[theta < 0] = theta[theta < 0] + math.pi
         # theta 是 ji i-第一近邻的弧度
 
         # Calculate torsions.
-        dist_ji = pos_ji.pow(2).sum(dim=-1).sqrt()#每条边的长度
-        plane1 = torch.cross(-pos_ji, pos_in0)#每个邻居 和i第一近的原子叉积 i+j+n0 确认的平面 法向量  长度为面积
-        plane2 = torch.cross(-pos_ji, pos_in1)#每个邻居 和i第二近的原子叉积 i+j+n1 确认的平面 法向量  长度为面积
-        a = (plane1 * plane2).sum(dim=-1)  #  |plane1| * |plane2| * cos_angle 两平面的法向量
-        b = (torch.cross(plane1, plane2) * pos_ji).sum(dim=-1) / dist_ji # 第一近邻是不是本身的时候*-1 是本身的时候换个投影
-        phi = torch.atan2(b, a) #i为中心的情况的下，近邻平面法向量夹角
+        dist_ji = pos_ji.pow(2).sum(dim=-1).sqrt()  # 每条边的长度
+        plane1 = torch.cross(-pos_ji, pos_in0)  # 每个邻居 和i第一近的原子叉积 i+j+n0 确认的平面 法向量  长度为面积
+        plane2 = torch.cross(-pos_ji, pos_in1)  # 每个邻居 和i第二近的原子叉积 i+j+n1 确认的平面 法向量  长度为面积
+        a = (plane1 * plane2).sum(dim=-1)  # |plane1| * |plane2| * cos_angle 两平面的法向量
+        b = (torch.cross(plane1, plane2) * pos_ji).sum(dim=-1) / dist_ji  # 第一近邻是不是本身的时候*-1 是本身的时候换个投影
+        phi = torch.atan2(b, a)  # i为中心的情况的下，近邻平面法向量夹角
         phi[phi < 0] = phi[phi < 0] + math.pi
 
         # Calculate right torsions.
-        plane1 = torch.cross(pos_ji, pos_jref_j)
-        plane2 = torch.cross(pos_ji, pos_iref)
+        plane1 = torch.cross(pos_ji, pos_jref_j)  # ji和j-jn0的法向量
+        plane2 = torch.cross(pos_ji, pos_iref)  #ji和i in0的法向量
 
         a = (plane1 * plane2).sum(dim=-1)  # cos_angle * |plane1| * |plane2|
         b = (torch.cross(plane1, plane2) * pos_ji).sum(dim=-1) / dist_ji
-        tau = torch.atan2(b, a)#j为中心的情况的下，近邻平面法向量夹角
+        tau = torch.atan2(b, a)  # ji和j-jn0  ji和i in0 的两面角
         tau[tau < 0] = tau[tau < 0] + math.pi
 
-        feature1 = self.feature1(dist, theta, phi)
-        feature2 = self.feature2(dist, tau)
+        feature1 = self.feature1(dist, theta, phi)  # 贝塞尔展开归一化的距离 * 球谐函数展开的两个角度 [两体 n^2*6]
+        feature2 = self.feature2(dist, tau)  # 贝塞尔展开归一化距离*球谐函数展开的一个角度 [两体 n*k]
 
         # Interaction blocks.
         for interaction_block in self.interaction_blocks:

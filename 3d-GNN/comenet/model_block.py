@@ -75,14 +75,7 @@ class Linear(torch.nn.Module):
 
 
 class TwoLayerLinear(torch.nn.Module):
-    def __init__(
-            self,
-            in_channels,
-            middle_channels,
-            out_channels,
-            bias=False,
-            act=False,
-    ):
+    def __init__(self, in_channels, middle_channels,out_channels,bias=False, act=False,):
         super(TwoLayerLinear, self).__init__()
         self.lin1 = Linear(in_channels, middle_channels, bias=bias)
         self.lin2 = Linear(middle_channels, out_channels, bias=bias)
@@ -138,15 +131,10 @@ class SimpleInteractionBlock(torch.nn.Module):
         self.act = act
 
         self.conv1 = EdgeGraphConv(hidden_channels, hidden_channels)
-
         self.conv2 = EdgeGraphConv(hidden_channels, hidden_channels)
-
         self.lin1 = Linear(hidden_channels, hidden_channels)
-
         self.lin2 = Linear(hidden_channels, hidden_channels)
-
         self.lin_cat = Linear(2 * hidden_channels, hidden_channels)
-
         self.norm = GraphNorm(hidden_channels)
 
         # Transformations of Bessel and spherical basis representations.
@@ -183,9 +171,9 @@ class SimpleInteractionBlock(torch.nn.Module):
         self.final.reset_parameters()
 
     def forward(self, x, feature1, feature2, edge_index, batch):
-        x = self.act(self.lin(x))
+        x = self.act(self.lin(x)) # [单体]
 
-        feature1 = self.lin_feature1(feature1)
+        feature1 = self.lin_feature1(feature1) #[两体 n**2*k]
         h1 = self.conv1(x, edge_index, feature1)
         h1 = self.lin1(h1)
         h1 = self.act(h1)
@@ -214,9 +202,7 @@ class angle_emb(torch.nn.Module):
         self.cutoff = cutoff
 
         bessel_formulas = bessel_basis(num_spherical, num_radial)
-        Y_lm = real_sph_harm(
-            num_spherical, spherical_coordinates=True, zero_m_only=True
-        )
+        Y_lm = real_sph_harm(num_spherical, spherical_coordinates=True, zero_m_only=True)
         self.sph_funcs = []
         self.bessel_funcs = []
 
@@ -227,15 +213,11 @@ class angle_emb(torch.nn.Module):
         for l in range(len(Y_lm)):
             if l == 0:
                 first_sph = sym.lambdify([theta], Y_lm[l][m], modules)
-                self.sph_funcs.append(
-                    lambda theta: torch.zeros_like(theta) + first_sph(theta)
-                )
+                self.sph_funcs.append(lambda theta: torch.zeros_like(theta) + first_sph(theta))
             else:
                 self.sph_funcs.append(sym.lambdify([theta], Y_lm[l][m], modules))
             for n in range(num_radial):
-                self.bessel_funcs.append(
-                    sym.lambdify([x], bessel_formulas[l][n], modules)
-                )
+                self.bessel_funcs.append(sym.lambdify([x], bessel_formulas[l][n], modules))
 
     def forward(self, dist, angle):
         dist = dist / self.cutoff
@@ -278,10 +260,11 @@ class torsion_emb(torch.nn.Module):
     def forward(self, dist, theta, phi):
         dist = dist / self.cutoff
         rbf = torch.stack([f(dist) for f in self.bessel_funcs], dim=1)  # num_spherical*num_radial
-        sbf = torch.stack([f(theta, phi) for f in self.sph_funcs], dim=1)  # num_spherical**2 dimenet只取第一个 1 3 5 7 但是comenet取所有的func 所以维度是n**2
+        # num_spherical**2 dimenet只取第一个 1 3 5 7 但是comenet取所有的func 所以维度是n**2
+        sbf = torch.stack([f(theta, phi) for f in self.sph_funcs], dim=1)
         n, k = self.num_spherical, self.num_radial
         # 第n行重复2n+1次 行数为n**2 列数为k 然后放到一行
         rbf = rbf.view((-1, n, k)).repeat_interleave(self.degreeInOrder, dim=1).view((-1, n ** 2 * k))
-        sbf = sbf.repeat_interleave(k, dim=1) #n**2重复k次 每个元素重复
+        sbf = sbf.repeat_interleave(k, dim=1)  # n**2重复k次 每个元素重复
         out = rbf * sbf
         return out
