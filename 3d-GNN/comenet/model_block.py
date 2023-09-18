@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from math import sqrt
 from torch import nn
 from torch import Tensor
-from torch_geometric.nn import GraphConv, GraphNorm
+from torch_geometric.nn import GraphConv, GraphNorm, GATConv
 from torch_geometric.nn import inits
 from torch.nn import Embedding
 
@@ -18,9 +18,7 @@ def swish(x):
 
 
 class Linear(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, bias=True,
-                 weight_initializer='glorot',
-                 bias_initializer='zeros'):
+    def __init__(self, in_channels, out_channels, bias=True, weight_initializer='glorot', bias_initializer='zeros'):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -75,7 +73,7 @@ class Linear(torch.nn.Module):
 
 
 class TwoLayerLinear(torch.nn.Module):
-    def __init__(self, in_channels, middle_channels,out_channels,bias=False, act=False,):
+    def __init__(self, in_channels, middle_channels, out_channels, bias=False, act=False, ):
         super(TwoLayerLinear, self).__init__()
         self.lin1 = Linear(in_channels, middle_channels, bias=bias)
         self.lin2 = Linear(middle_channels, out_channels, bias=bias)
@@ -171,25 +169,25 @@ class SimpleInteractionBlock(torch.nn.Module):
         self.final.reset_parameters()
 
     def forward(self, x, feature1, feature2, edge_index, batch):
-        x = self.act(self.lin(x)) # [单体]
+        x = self.act(self.lin(x))  # [单体]
 
-        feature1 = self.lin_feature1(feature1) #[两体 n**2*k]
-        h1 = self.conv1(x, edge_index, feature1)
+        feature1 = self.lin_feature1(feature1)  # [两体 n**2*k]->[两体 middle]->[两体 hidden]
+        h1 = self.conv1(x, edge_index, feature1)  # GCN卷积  edge_weight 是空间信息
         h1 = self.lin1(h1)
         h1 = self.act(h1)
 
-        feature2 = self.lin_feature2(feature2)
-        h2 = self.conv2(x, edge_index, feature2)
+        feature2 = self.lin_feature2(feature2)  # [两体 n*k]->[两体 middle]->[两体 hidden]
+        h2 = self.conv2(x, edge_index, feature2)  # GCN卷积  edge_weight 是空间信息
         h2 = self.lin2(h2)
         h2 = self.act(h2)
 
-        h = self.lin_cat(torch.cat([h1, h2], 1))
+        h = self.lin_cat(torch.cat([h1, h2], 1))  # [两体 256] -> [两体 128]
 
         h = h + x
         for lin in self.lins:
             h = self.act(lin(h)) + h
-        h = self.norm(h, batch)
-        h = self.final(h)
+        h = self.norm(h, batch)  # 列归一化
+        h = self.final(h)  # 线性层
         return h
 
 

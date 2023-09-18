@@ -25,13 +25,13 @@ class ComENet(nn.Module):
     def __init__(
             self,
             cutoff=8.0,
-            num_layers=4,
+            num_layers=4,  # gcn层数
             hidden_channels=256,
             middle_channels=64,
             out_channels=1,
             num_radial=3,
             num_spherical=2,
-            num_output_layers=3,
+            num_output_layers=3,  # gcn后的resnet层数
     ):
         super(ComENet, self).__init__()
         self.out_channels = out_channels
@@ -175,7 +175,7 @@ class ComENet(nn.Module):
 
         # Calculate right torsions.
         plane1 = torch.cross(pos_ji, pos_jref_j)  # ji和j-jn0的法向量
-        plane2 = torch.cross(pos_ji, pos_iref)  #ji和i in0的法向量
+        plane2 = torch.cross(pos_ji, pos_iref)  # ji和i in0的法向量
 
         a = (plane1 * plane2).sum(dim=-1)  # cos_angle * |plane1| * |plane2|
         b = (torch.cross(plane1, plane2) * pos_ji).sum(dim=-1) / dist_ji
