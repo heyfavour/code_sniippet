@@ -23,9 +23,18 @@ if __name__ == '__main__':
     set_seed(99)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_loader, valid_loader, train_count, valid_count = QM9_dataloader()
-    model = ComENet(cutoff=5.0).to(device)
+    model = ComENet(
+        num_layers=6,  # gcn层数
+        hidden_channels=512,
+        middle_channels=256,
+        out_channels=1,
+        num_radial=6,
+        num_spherical=7,
+        num_output_layers=3,  # gcn后的resnet层数
+
+    ).to(device)
     optimizer = optim.AdamW(model.parameters(), lr=0.001, amsgrad=True)
-    scheduler_lr = LinearWarmupExponentialDecay(optimizer, warmup_steps=1000, decay_rate=0.5, decay_steps=50000)  #
+    scheduler_lr = LinearWarmupExponentialDecay(optimizer, warmup_steps=3000, decay_rate=0.01, decay_steps=40000)  #
     criterion = torch.nn.L1Loss()
     writer = SummaryWriter("./logs")
 
@@ -41,14 +50,12 @@ if __name__ == '__main__':
             y = torch.reshape(data.y[:, 4], (-1, 1))
             loss = criterion(out, y)
             loss.backward()
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
             optimizer.step()
             scheduler_lr.step()
             epoch_loss += loss.item() * data.num_graphs
             steps += 1
             writer.add_scalar('lr', optimizer.param_groups[0]['lr'], steps)
-            sys.exit(0)
-        sys.exit(0)
         print(f"[EPOCH]:{epoch} loss:{epoch_loss / train_count}] lr:{optimizer.param_groups[0]['lr']}")
         writer.add_scalar('train', epoch_loss / train_count, steps)
         end_time = datetime.datetime.now()
