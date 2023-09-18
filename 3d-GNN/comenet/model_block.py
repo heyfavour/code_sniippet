@@ -255,9 +255,7 @@ class torsion_emb(torch.nn.Module):
         self.cutoff = cutoff
 
         bessel_formulas = bessel_basis(num_spherical, num_radial)
-        Y_lm = real_sph_harm(
-            num_spherical, spherical_coordinates=True, zero_m_only=False
-        )
+        Y_lm = real_sph_harm(num_spherical, spherical_coordinates=True, zero_m_only=False)
         self.sph_funcs = []
         self.bessel_funcs = []
 
@@ -267,34 +265,23 @@ class torsion_emb(torch.nn.Module):
         modules = {"sin": torch.sin, "cos": torch.cos, "sqrt": torch.sqrt}
         for l in range(len(Y_lm)):
             for m in range(len(Y_lm[l])):
-                if (
-                        l == 0
-                ):
+                if (l == 0):
                     first_sph = sym.lambdify([theta, phi], Y_lm[l][m], modules)
-                    self.sph_funcs.append(
-                        lambda theta, phi: torch.zeros_like(theta)
-                                           + first_sph(theta, phi)
-                    )
+                    self.sph_funcs.append(lambda theta, phi: torch.zeros_like(theta) + first_sph(theta, phi))
                 else:
-                    self.sph_funcs.append(
-                        sym.lambdify([theta, phi], Y_lm[l][m], modules)
-                    )
+                    self.sph_funcs.append(sym.lambdify([theta, phi], Y_lm[l][m], modules))
             for j in range(num_radial):
-                self.bessel_funcs.append(
-                    sym.lambdify([x], bessel_formulas[l][j], modules)
-                )
-
-        self.register_buffer(
-            "degreeInOrder", torch.arange(num_spherical) * 2 + 1, persistent=False
-        )
+                self.bessel_funcs.append(sym.lambdify([x], bessel_formulas[l][j], modules))
+        # [0 1 2 3 4 5 6]->[0 2 4 6 8 10 12]->[1 3 5 7 9 11 13] [1 3]
+        self.register_buffer("degreeInOrder", torch.arange(num_spherical) * 2 + 1, persistent=False)
 
     def forward(self, dist, theta, phi):
         dist = dist / self.cutoff
-        rbf = torch.stack([f(dist) for f in self.bessel_funcs], dim=1)
-        sbf = torch.stack([f(theta, phi) for f in self.sph_funcs], dim=1)
-
+        rbf = torch.stack([f(dist) for f in self.bessel_funcs], dim=1)  # num_spherical*num_radial
+        sbf = torch.stack([f(theta, phi) for f in self.sph_funcs], dim=1)  # num_spherical**2 dimenet只取第一个 1 3 5 7 但是comenet取所有的func 所以维度是n**2
         n, k = self.num_spherical, self.num_radial
+        # 第n行重复2n+1次 行数为n**2 列数为k 然后放到一行
         rbf = rbf.view((-1, n, k)).repeat_interleave(self.degreeInOrder, dim=1).view((-1, n ** 2 * k))
-        sbf = sbf.repeat_interleave(k, dim=1)
+        sbf = sbf.repeat_interleave(k, dim=1) #n**2重复k次 每个元素重复
         out = rbf * sbf
         return out

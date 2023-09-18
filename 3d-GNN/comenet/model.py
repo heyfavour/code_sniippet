@@ -93,9 +93,9 @@ class ComENet(nn.Module):
         # Calculate distances.
         ##############################################################################
         # 中心原子的第一近邻 第二近邻
-        _, argmin0 = scatter_min(dist, i, dim_size=num_nodes)  # 返回每个中心节点最近的边索引
+        _, argmin0 = scatter_min(dist, i, dim_size=num_nodes)  # 返回每个中心节点最近的边索引 argmin0 [单体] 边索引
         argmin0[argmin0 >= len(i)] = 0  # 逻辑上不存在吧?
-        n0 = j[argmin0]  # 根据边索引找到中心原子第一近邻居节点j n0是原子索引
+        n0 = j[argmin0]  # 根据边索引找到中心原子第一近邻居节点j n0是原子索引 n0 [单体] 原子索引
         # 给最近的原子加上cutoff让去找第二近原子
         add = torch.zeros_like(dist).to(dist.device)
         add[argmin0] = self.cutoff
@@ -103,10 +103,10 @@ class ComENet(nn.Module):
 
         _, argmin1 = scatter_min(dist1, i, dim_size=num_nodes)
         argmin1[argmin1 >= len(i)] = 0
-        n1 = j[argmin1]  # 根据索引找到第二近原子索引
+        n1 = j[argmin1]  # 根据索引找到第二近原子索引 [单体] 原子索引
         # --------------------------------------------------------
         # 邻居原子的第一近邻 第二近邻 为什么要找j？因为i的第一近邻可以是j但是j的第一近邻不一定是i
-        _, argmin0_j = scatter_min(dist, j, dim_size=num_nodes)
+        _, argmin0_j = scatter_min(dist, j, dim_size=num_nodes) # 返回每个邻居节点最近的边索引 argmin1 [单体] 边索引
         argmin0_j[argmin0_j >= len(j)] = 0
         n0_j = i[argmin0_j]
 
@@ -122,7 +122,7 @@ class ComENet(nn.Module):
         # ----------------------------------------------------------
         # 单体到边
         # n0, n1 for i
-        n0 = n0[i]
+        n0 = n0[i]# 每条边
         n1 = n1[i]
         # n0, n1 for j
         n0_j = n0_j[j]
@@ -154,9 +154,8 @@ class ComENet(nn.Module):
         # pos_ji j-i 的距离向量
         # pos_in0 j-i 距离向量 j-i  i 的第一近邻
         # pos_in1 j-i 距离向量 j-i  i 的第二近邻
-        # pos_iref j-i 距离向量 每条j-i i最近的原子的边向量
-        # pos_jref_j j-i 距离向量 每条j-i j最近的原子的边向量
-        # pos_in0 - pos_iref 区别 pos_iref 替换了最近是j的距离向量
+        # pos_iref   j-i 距离向量 每条j-i i 的第一近邻 参考系
+        # pos_jref_j j-i 距离向量 每条j-i i 的第一近邻 参考系
 
 
 
@@ -164,7 +163,7 @@ class ComENet(nn.Module):
         # Calculate angles.
         a = ((-pos_ji) * pos_in0).sum(dim=-1)#-pos_ji i->j向量
         b = torch.cross(-pos_ji, pos_in0).norm(dim=-1)
-        theta = torch.atan2(b, a)# ij和最近的原子弧度
+        theta = torch.atan2(b, a)# ij和最近的原子弧度 确认得是弧度平面
         theta[theta < 0] = theta[theta < 0] + math.pi
         # theta 是 ji i-第一近邻的弧度
 
@@ -172,10 +171,9 @@ class ComENet(nn.Module):
         dist_ji = pos_ji.pow(2).sum(dim=-1).sqrt()#每条边的长度
         plane1 = torch.cross(-pos_ji, pos_in0)#每个邻居 和i第一近的原子叉积 i+j+n0 确认的平面 法向量  长度为面积
         plane2 = torch.cross(-pos_ji, pos_in1)#每个邻居 和i第二近的原子叉积 i+j+n1 确认的平面 法向量  长度为面积
-        a = (plane1 * plane2).sum(dim=-1)  # cos_angle * |plane1| * |plane2| 两平面的法向量
-        # 在计算b时，乘以pos_ji是为了将法向量与边向量进行点乘。这样可以获得法向量在边向量方向上的投影长度，从而得到与边向量方向上的夹角。这样计算出的b可以与a相除，得到平面夹角的余弦值。
-        b = (torch.cross(plane1, plane2) * pos_ji).sum(dim=-1) / dist_ji
-        phi = torch.atan2(b, a)
+        a = (plane1 * plane2).sum(dim=-1)  #  |plane1| * |plane2| * cos_angle 两平面的法向量
+        b = (torch.cross(plane1, plane2) * pos_ji).sum(dim=-1) / dist_ji # 第一近邻是不是本身的时候*-1 是本身的时候换个投影
+        phi = torch.atan2(b, a) #i为中心的情况的下，近邻平面法向量夹角
         phi[phi < 0] = phi[phi < 0] + math.pi
 
         # Calculate right torsions.
@@ -184,7 +182,7 @@ class ComENet(nn.Module):
 
         a = (plane1 * plane2).sum(dim=-1)  # cos_angle * |plane1| * |plane2|
         b = (torch.cross(plane1, plane2) * pos_ji).sum(dim=-1) / dist_ji
-        tau = torch.atan2(b, a)
+        tau = torch.atan2(b, a)#j为中心的情况的下，近邻平面法向量夹角
         tau[tau < 0] = tau[tau < 0] + math.pi
 
         feature1 = self.feature1(dist, theta, phi)
