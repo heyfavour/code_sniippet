@@ -34,13 +34,13 @@ if __name__ == '__main__':
 
     ).to(device)
     optimizer = optim.AdamW(model.parameters(), lr=0.001, amsgrad=True)
-    scheduler_lr = LinearWarmupExponentialDecay(optimizer, warmup_steps=3000, decay_rate=0.01, decay_steps=40000)  #
+    scheduler_lr = LinearWarmupExponentialDecay(optimizer, warmup_steps=3000, decay_rate=0.01, decay_steps=20000)  #
     criterion = torch.nn.L1Loss()
     writer = SummaryWriter("./logs")
 
     model.train()
     steps = 0
-    for epoch in range(1200):
+    for epoch in range(500):
         epoch_loss = 0
         start_time = datetime.datetime.now()
         for idx, data in enumerate(train_loader):
@@ -56,6 +56,7 @@ if __name__ == '__main__':
             epoch_loss += loss.item() * data.num_graphs
             steps += 1
             writer.add_scalar('lr', optimizer.param_groups[0]['lr'], steps)
+            sys.exit(0)
         print(f"[EPOCH]:{epoch} loss:{epoch_loss / train_count}] lr:{optimizer.param_groups[0]['lr']}")
         writer.add_scalar('train', epoch_loss / train_count, steps)
         end_time = datetime.datetime.now()

@@ -155,7 +155,7 @@ class ComENet(nn.Module):
         # pos_in0 j-i 距离向量 j-i  i 的第一近邻
         # pos_in1 j-i 距离向量 j-i  i 的第二近邻
         # pos_iref   j-i 距离向量 每条j-i i 的第一近邻 参考系
-        # pos_jref_j j-i 距离向量 每条j-i i 的第一近邻 参考系
+        # pos_jref_j j-i 距离向量 每条j-i j 的第一近邻 参考系
 
         # Calculate angles.
         a = ((-pos_ji) * pos_in0).sum(dim=-1)  # -pos_ji i->j向量
