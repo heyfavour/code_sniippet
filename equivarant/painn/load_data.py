@@ -19,6 +19,8 @@ def get_dataloader():
         num_workers=1,
         pin_memory=True,  # set to false, when not using a GPU
         load_properties=[QM9.gap],  # only load U0 property
+        distance_unit= "Ang",
+        remove_uncharacterized = True,
     )
     qm9data.prepare_data()
     qm9data.setup()
