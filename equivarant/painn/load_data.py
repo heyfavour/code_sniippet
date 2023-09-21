@@ -27,3 +27,4 @@ def get_dataloader():
 
 if __name__ == '__main__':
     qm9data = get_dataloader()
+    print(qm9data.dataset[0])
