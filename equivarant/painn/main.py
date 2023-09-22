@@ -9,7 +9,6 @@ from model import PaiNN
 from load_data import get_dataloader
 from schedules import LinearWarmupExponentialDecay
 from torch.utils.tensorboard import SummaryWriter
-import schnetpack as spk
 
 def set_seed(seed=1):
     random.seed(seed)
@@ -17,10 +16,15 @@ def set_seed(seed=1):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+def to_device(inputs,device):
+    for key,value in inputs.items():
+        inputs[key] = value.to(device)
+    data["batch_num"] = len(inputs["_idx"])
+    return inputs
 
 if __name__ == '__main__':
     set_seed(99)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     qm9 = get_dataloader()
     model = PaiNN(
         n_atom_basis=128,
@@ -37,29 +41,31 @@ if __name__ == '__main__':
         epoch_loss = 0
         start_time = datetime.datetime.now()
         for idx, data in enumerate(qm9.train_dataloader()):
+            data = to_device(data,device)
             optimizer.zero_grad()
-            out = model(data)
-            y = torch.reshape(data.y[:, 4], (-1, 1))
-            loss = criterion(out, y)
+            q,mu = model(data)
+            y = torch.reshape(data["gap"], (-1, 1))
+            loss = criterion(q, y)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
             optimizer.step()
             scheduler_lr.step()
-            epoch_loss += loss.item() * data.num_graphs
+            epoch_loss += loss.item() * data["batch_num"]
             steps += 1
             writer.add_scalar('lr', optimizer.param_groups[0]['lr'], steps)
             sys.exit(0)
-        print(f"[EPOCH]:{epoch} loss:{epoch_loss / train_count}] lr:{optimizer.param_groups[0]['lr']}")
-        writer.add_scalar('train', epoch_loss / train_count, steps)
+        print(f"[EPOCH]:{epoch} loss:{epoch_loss / 110000}] lr:{optimizer.param_groups[0]['lr']}")
+        writer.add_scalar('train', epoch_loss / 110000, steps)
         end_time = datetime.datetime.now()
         use_time = end_time - start_time
         model.eval()
         with torch.no_grad():
             epoch_loss = 0
             for idx, data in enumerate(qm9.val_dataloader()):
+                data = to_device(data, device)
                 out = model(data)  # [bs,1]
                 y = torch.reshape(data.y[:, 4], (-1, 1))
                 loss = criterion(out, y)
-                epoch_loss += loss.item() * data.num_graphs
-        print(f"[VALID] loss:{epoch_loss / valid_count}]")
-        writer.add_scalar('valid', epoch_loss / valid_count, steps)
+                epoch_loss += loss.item() * data["batch_num"]
+        print(f"[VALID] loss:{epoch_loss / 10000}]")
+        writer.add_scalar('valid', epoch_loss / 10000, steps)

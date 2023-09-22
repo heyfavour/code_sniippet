@@ -1,11 +1,5 @@
-import os
-import schnetpack as spk
 from schnetpack.datasets import QM9
 import schnetpack.transform as trn
-
-import torch
-import torchmetrics
-import pytorch_lightning as pl
 
 
 def get_dataloader():
@@ -19,8 +13,9 @@ def get_dataloader():
         num_workers=1,
         pin_memory=True,  # set to false, when not using a GPU
         load_properties=[QM9.gap],  # only load U0 property
-        distance_unit= "Ang",
-        remove_uncharacterized = True,
+        distance_unit="Ang",
+        remove_uncharacterized=True,
+        pin_memory_device="cuda:0",
     )
     qm9data.prepare_data()
     qm9data.setup()

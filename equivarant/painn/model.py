@@ -31,16 +31,8 @@ class PaiNNInteraction(nn.Module):
             snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
         )
 
-    def forward(
-            self,
-            q: torch.Tensor,
-            mu: torch.Tensor,
-            Wij: torch.Tensor,
-            dir_ij: torch.Tensor,
-            idx_i: torch.Tensor,
-            idx_j: torch.Tensor,
-            n_atoms: int,
-    ):
+    def forward(self, q: torch.Tensor, mu: torch.Tensor, Wij: torch.Tensor, dir_ij: torch.Tensor, idx_i: torch.Tensor,
+                idx_j: torch.Tensor, n_atoms: int):
         """Compute interaction output.
 
         Args:
@@ -53,20 +45,25 @@ class PaiNNInteraction(nn.Module):
         Returns:
             atom features after interaction
         """
+        # [单体 1 128]  [单体 3 128] [两体 1 384] [两体 1] idx_i idx_j n_atoms
+        # q, mu, filter_list[i], dir_ij, idx_i, idx_j, n_atoms
         # inter-atomic
+        print("=============================================================")
         x = self.interatomic_context_net(q)
+        print(x.shape)
         xj = x[idx_j]
-        muj = mu[idx_j]
         x = Wij * xj
 
-        dq, dmuR, dmumu = torch.split(x, self.n_atom_basis, dim=-1)
-        dq = snn.scatter_add(dq, idx_i, dim_size=n_atoms)
+        dq, dmuR, dmumu = torch.split(x, self.n_atom_basis, dim=-1)  # [两体 1 128]
+        dq = snn.scatter_add(dq, idx_i, dim_size=n_atoms)  # [单体 1 128]
+
+        muj = mu[idx_j]
+        # [370, 1, 128]*[370, 3, 1]->[370, 3, 128] +  [370, 1, 128]*[370, 3, 128]->[370, 3, 128]  ->[370, 3, 128]
         dmu = dmuR * dir_ij[..., None] + dmumu * muj
-        dmu = snn.scatter_add(dmu, idx_i, dim_size=n_atoms)
+        dmu = snn.scatter_add(dmu, idx_i, dim_size=n_atoms)  # [单体 3 128]
 
-        q = q + dq
-        mu = mu + dmu
-
+        q = q + dq  # [单体 1 128]
+        mu = mu + dmu  # [单体 3 128]
         return q, mu
 
 
@@ -103,16 +100,19 @@ class PaiNNMixing(nn.Module):
             atom features after interaction
         """
         ## intra-atomic
-        mu_mix = self.mu_channel_mix(mu)
-        mu_V, mu_W = torch.split(mu_mix, self.n_atom_basis, dim=-1)
-        mu_Vn = torch.sqrt(torch.sum(mu_V ** 2, dim=-2, keepdim=True) + self.epsilon)
+        mu_mix = self.mu_channel_mix(mu)#[21, 3, 128]->[21, 3, 256]
 
-        ctx = torch.cat([q, mu_Vn], dim=-1)
-        x = self.intraatomic_context_net(ctx)
+        mu_V, mu_W = torch.split(mu_mix, self.n_atom_basis, dim=-1)#[21, 3, 256] -> [21, 3, 128] [21, 3, 128]
+        mu_Vn = torch.sqrt(torch.sum(mu_V ** 2, dim=-2, keepdim=True) + self.epsilon)#[21, 3, 128]->[21, 1, 128]
 
-        dq_intra, dmu_intra, dqmu_intra = torch.split(x, self.n_atom_basis, dim=-1)
+        ctx = torch.cat([q, mu_Vn], dim=-1)#[21, 1, 128] cat [21, 1, 128] = [21, 1, 256]
+        x = self.intraatomic_context_net(ctx)#[21, 1, 256]->[21, 1, 384]
+        print(x.shape)
+
+        dq_intra, dmu_intra, dqmu_intra = torch.split(x, self.n_atom_basis, dim=-1)#[21, 1, 128]
         dmu_intra = dmu_intra * mu_W
-
+        print( torch.sum(mu_V * mu_W, dim=1, keepdim=True).shape)
+        print("===================rugu")
         dqmu_intra = dqmu_intra * torch.sum(mu_V * mu_W, dim=1, keepdim=True)
 
         q = q + dq_intra + dqmu_intra
@@ -164,20 +164,11 @@ class PaiNN(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = spk.nn.GaussianRBF(n_rbf=20, cutoff=5.0)
 
-        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
+        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)  # 100 128
 
         self.share_filters = shared_filters
-
-        if shared_filters:
-            self.filter_net = snn.Dense(
-                self.radial_basis.n_rbf, 3 * n_atom_basis, activation=None
-            )
-        else:
-            self.filter_net = snn.Dense(
-                self.radial_basis.n_rbf,
-                self.n_interactions * n_atom_basis * 3,
-                activation=None,
-            )
+        self.filter_net = snn.Dense(self.radial_basis.n_rbf, self.n_interactions * n_atom_basis * 3,
+                                    activation=None)  # 20->3*128*3
 
         self.interactions = snn.replicate_module(
             lambda: PaiNNInteraction(
@@ -194,6 +185,14 @@ class PaiNN(nn.Module):
             shared_interactions,
         )
 
+        self.outnet = spk.nn.build_mlp(
+            n_in=128,
+            n_out=1,
+            n_hidden=128,
+            n_layers=3,
+            activation=activation,
+        )
+
     def forward(self, inputs: Dict[str, torch.Tensor]):
         """
         Compute atomic representations/embeddings.
@@ -207,38 +206,36 @@ class PaiNN(nn.Module):
             return_intermediate=True was used.
         """
         # get tensors from input dictionary
-        inputs = self.cal_rij(inputs)
-        atomic_numbers = inputs[properties.Z]
-        r_ij = inputs[properties.Rij]
-        idx_i = inputs[properties.idx_i]
-        idx_j = inputs[properties.idx_j]
-        n_atoms = atomic_numbers.shape[0]
-
+        inputs = self.cal_rij(inputs)  # 计算Rij
+        atomic_numbers = inputs[properties.Z]  # 每个原子的Z
+        r_ij = inputs[properties.Rij]  # j-i 矢量
+        idx_i = inputs[properties.idx_i]  # i
+        idx_j = inputs[properties.idx_j]  # j
+        n_atoms = atomic_numbers.shape[0]  # 总原子数
         # compute atom and pair features
-        d_ij = torch.norm(r_ij, dim=1, keepdim=True)
-        dir_ij = r_ij / d_ij
-        phi_ij = self.radial_basis(d_ij)
-        fcut = self.cutoff_fn(d_ij)
+        d_ij = torch.norm(r_ij, dim=1, keepdim=True)  # 距离
 
-        filters = self.filter_net(phi_ij) * fcut[..., None]
-        if self.share_filters:
-            filter_list = [filters] * self.n_interactions
-        else:
-            filter_list = torch.split(filters, 3 * self.n_atom_basis, dim=-1)
+        phi_ij = self.radial_basis(d_ij)  # [两体 1 20]  高斯展开
+        fcut = self.cutoff_fn(d_ij)[..., None]  # 0.5 * (torch.cos(input * math.pi / cutoff) + 1.0) 余弦优化  [两体 1 1]
+        filters = self.filter_net(phi_ij) * fcut  # [两体 1 3*128*3]*[两体 1 1]->[两体 1 3*128*3]
+        filter_list = torch.split(filters, 3 * self.n_atom_basis, dim=-1)  # [两体 1 3*128*3] -> 分成 3个 两体 1 3*128
 
-        q = self.embedding(atomic_numbers)[:, None]
+        dir_ij = r_ij / d_ij  # rij归一化
+        q = self.embedding(atomic_numbers)[:, None]  # [单体] -> [单体 1 128]
         qs = q.shape
-        mu = torch.zeros((qs[0], 3, qs[2]), device=q.device)
+        mu = torch.zeros((qs[0], 3, qs[2]), device=q.device)  # [单体 3 128] 0
 
         for i, (interaction, mixing) in enumerate(zip(self.interactions, self.mixing)):
+            # [单体 1 128]  [单体 3 128] [两体 1 128*3] [两体 1] idx_i idx_j n_atoms
             q, mu = interaction(q, mu, filter_list[i], dir_ij, idx_i, idx_j, n_atoms)
             q, mu = mixing(q, mu)
 
         q = q.squeeze(1)
 
-        inputs["scalar_representation"] = q
-        inputs["vector_representation"] = mu
-        return inputs
+        y = self.outnet(q)
+        idx_m = inputs[properties.idx_m]
+        y = snn.scatter_add(y, idx_m, dim_size=inputs["batch_num"])
+        return y, mu
 
 
 if __name__ == '__main__':
