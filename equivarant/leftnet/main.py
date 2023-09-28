@@ -53,13 +53,13 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             data = data.to(device)
             out = model(data)
-            loss = loss_func(out, data.y.unsqueeze(1))
+            loss = loss_func(out, data.y[:,4].unsqueeze(1))
             loss.backward()
             optimizer.step()
             scheduler_lr.step()
             loss_accum += loss.item() * data.num_graphs
             steps += 1
-            sys.exit(0)
+        print(f"[EPOCH]:{epoch} loss:{loss_accum / info['train_count']}] lr:{optimizer.param_groups[0]['lr']}")
         model.eval()
         _out = torch.Tensor([]).to(device)
         _y = torch.Tensor([]).to(device)
@@ -72,3 +72,4 @@ if __name__ == '__main__':
                 _y = torch.cat([_y, data.y.unsqueeze(1)], dim=0)
 
         loss = torch.mean(torch.abs(_out - _y)).cpu().item()
+        print(f"[VALID] loss:{loss}]")

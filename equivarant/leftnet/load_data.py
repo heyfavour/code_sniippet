@@ -131,7 +131,7 @@ def QM9_dataloader():
     # print(dataset[0].posc)
 
     train_dataset, valid_dataset = random_split(dataset, [0.9, 0.1])
-    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True)
     valid_loader = DataLoader(valid_dataset, batch_size=512, shuffle=False)
     info = {
         "train_count": len(train_dataset),
