@@ -32,7 +32,7 @@ if __name__ == '__main__':
         cutoff=8.0,
         num_layers=6,
         hidden_channels=256,
-        num_radial=96,
+        num_radial=32,
         y_mean=info["mean"],
         y_std=info["std"],
     ).to(device)
@@ -54,11 +54,13 @@ if __name__ == '__main__':
             data = data.to(device)
             out = model(data)
             loss = loss_func(out, data.y[:,4].unsqueeze(1))
+            print(loss)
             loss.backward()
             optimizer.step()
             scheduler_lr.step()
             loss_accum += loss.item() * data.num_graphs
             steps += 1
+            sys.exit(0)
         print(f"[EPOCH]:{epoch} loss:{loss_accum / info['train_count']}] lr:{optimizer.param_groups[0]['lr']}")
         model.eval()
         _out = torch.Tensor([]).to(device)

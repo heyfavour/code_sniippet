@@ -9,6 +9,8 @@ from torch_geometric.datasets import QM9
 from torch_geometric.datasets.qm9 import conversion
 from torch_geometric.loader import DataLoader
 from torch.utils.data import random_split
+
+
 class QM9DateSet(QM9):
 
     def process(self):
@@ -112,8 +114,9 @@ class QM9DateSet(QM9):
 
             y = target[i].unsqueeze(0)
             name = mol.GetProp('_Name')
-            mean_pos = pos - torch.tensor([ 0.0949, -0.3333,  0.0624])
-            data = Data(x=x, z=z, pos=pos,posc=mean_pos, edge_index=edge_index,edge_attr=edge_attr, y=y, name=name, idx=i)
+            mean_pos = pos - torch.tensor([0.0949, -0.3333, 0.0624])
+            data = Data(x=x, z=z, pos=pos, posc=mean_pos, edge_index=edge_index, edge_attr=edge_attr, y=y, name=name,
+                        idx=i)
 
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
@@ -124,6 +127,7 @@ class QM9DateSet(QM9):
 
         torch.save(self.collate(data_list), self.processed_paths[0])
 
+
 def QM9_dataloader():
     dataset = QM9DateSet(root='./data')
     # dataset.data.pos.mean(dim=0) tensor([ 0.0949, -0.3333,  0.0624])
@@ -131,13 +135,13 @@ def QM9_dataloader():
     # print(dataset[0].posc)
 
     train_dataset, valid_dataset = random_split(dataset, [0.9, 0.1])
-    train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True)
-    valid_loader = DataLoader(valid_dataset, batch_size=512, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=512, shuffle=True)
+    valid_loader = DataLoader(valid_dataset, batch_size=32, shuffle=False)
     info = {
         "train_count": len(train_dataset),
         "valid_count": len(valid_dataset),
         "mean": torch.mean(dataset._data.y[4]).item(),
-        "std": torch.mean(dataset._data.y[4]).std(),
+        "std": torch.std(dataset._data.y[4]).item(),
     }
     return train_loader, valid_loader, info
 

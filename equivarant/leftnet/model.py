@@ -1,3 +1,4 @@
+import datetime
 import math
 from math import pi
 from typing import Optional, Tuple
@@ -379,6 +380,7 @@ class LEFTNet(torch.nn.Module):
         self.inv_sqrt_2 = 1 / math.sqrt(2.0)
 
         self.reset_parameters()
+        self.time  = None
 
     def reset_parameters(self):
         self.radial_emb.reset_parameters()
@@ -393,8 +395,13 @@ class LEFTNet(torch.nn.Module):
         for layer in self.lin:
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
+    def record_time(self,info):
+        if self.time  is not None:
+            print(f"{info} : {datetime.datetime.now()- self.time}")
+        self.time = datetime.datetime.now()
 
     def forward(self, batch_data):
+        self.record_time("初始化")
         z, pos, batch = batch_data.z, batch_data.posc, batch_data.batch
         # z, pos, batch = batch_data.z, batch_data.pos, batch_data.batch
         if self.pos_require_grad:
@@ -405,6 +412,8 @@ class LEFTNet(torch.nn.Module):
 
         # construct edges based on the cutoff value
         edge_index = radius_graph(pos, r=self.cutoff, batch=batch)
+        self.record_time("雷达图")
+
         i, j = edge_index
 
         # embed pair-wise distance
@@ -484,6 +493,7 @@ class LEFTNet(torch.nn.Module):
         A_i_j = torch.cat((scalar3, scalar4), dim=-1) * soft_cutoff.unsqueeze(-1)
         # \sigma_{j对i的影响在x y z方向的分布} 然后用新基表达 cat(i j  a*lin(a*guass(r)) a*guass(r))
         A_i_j = torch.cat((A_i_j, radial_hidden, radial_emb), dim=-1)
+        self.record_time("A_I_J")
 
         for i in range(self.num_layers):
             # equivariant message passing
@@ -491,11 +501,12 @@ class LEFTNet(torch.nn.Module):
 
             s = s + ds
             vec = vec + dvec
-
+            self.record_time("LSE")
             # FTE: frame transition encoding
             ds, dvec = self.FTEs[i](s, vec, node_frame)
             s = s + ds
             vec = vec + dvec
+            self.record_time("FTEs")
 
         if self.pos_require_grad:
             forces = self.out_forces(s, vec)
