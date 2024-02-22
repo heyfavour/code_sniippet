@@ -1,0 +1,4 @@
+./data/imgs/*.jpg
+./data/mask/*.jif
+./data/processed*/*.pickle
+./*.pth
