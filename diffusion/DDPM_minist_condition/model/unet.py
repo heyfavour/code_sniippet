@@ -1,4 +1,3 @@
-
 import math
 import sys
 
@@ -32,16 +31,23 @@ class TimeEmbedding(nn.Module):
             Swish(),
             nn.Linear(dim, dim),
         )
-        self.initialize()
-
-    def initialize(self):
-        for module in self.modules():
-            if isinstance(module, nn.Linear):
-                init.xavier_uniform_(module.weight)
-                init.zeros_(module.bias)
 
     def forward(self, t):
         emb = self.timembedding(t)
+        return emb
+
+class LabelEmbedding(nn.Module):
+    def __init__(self, T, d_model, dim):
+        super().__init__()
+        self.labelbedding = nn.Sequential(
+            nn.Embedding(T,128),
+            nn.Linear(128, d_model),
+            Swish(),
+            nn.Linear(d_model, dim),
+        )
+
+    def forward(self, y):
+        emb = self.labelbedding(y)
         return emb
 
 
@@ -55,7 +61,7 @@ class DownSample(nn.Module):
         init.xavier_uniform_(self.main.weight)
         init.zeros_(self.main.bias)
 
-    def forward(self, x, temb):
+    def forward(self, x, temb,yemb):
         x = self.main(x)
         return x
 
@@ -70,7 +76,7 @@ class UpSample(nn.Module):
         init.xavier_uniform_(self.main.weight)
         init.zeros_(self.main.bias)
 
-    def forward(self, x, temb):
+    def forward(self, x, temb,yemb):
         _, _, H, W = x.shape
         x = F.interpolate(
             x, scale_factor=2, mode='nearest')
@@ -128,12 +134,17 @@ class ResBlock(nn.Module):
             Swish(),
             nn.Linear(tdim, out_ch),
         )
+        self.yemb_proj = nn.Sequential(
+            Swish(),
+            nn.Linear(tdim, out_ch),
+        )
         self.block2 = nn.Sequential(
             nn.GroupNorm(16, out_ch),
             Swish(),
             nn.Dropout(dropout),
             nn.Conv2d(out_ch, out_ch, 3, stride=1, padding=1),
         )
+        self.class_bias = nn.Embedding(10, out_ch)
         if in_ch != out_ch:
             self.shortcut = nn.Conv2d(in_ch, out_ch, 1, stride=1, padding=0)
         else:
@@ -142,18 +153,11 @@ class ResBlock(nn.Module):
             self.attn = AttnBlock(out_ch)
         else:
             self.attn = nn.Identity()
-        self.initialize()
 
-    def initialize(self):
-        for module in self.modules():
-            if isinstance(module, (nn.Conv2d, nn.Linear)):
-                init.xavier_uniform_(module.weight)
-                init.zeros_(module.bias)
-        init.xavier_uniform_(self.block2[-1].weight, gain=1e-5)
-
-    def forward(self, x, temb):
+    def forward(self, x, temb,yemb):
         h = self.block1(x)
         h += self.temb_proj(temb)[:, :, None, None]
+        h += self.yemb_proj(yemb)[:, :, None, None]
         h = self.block2(h)
 
         h = h + self.shortcut(x)
@@ -167,6 +171,7 @@ class UNet(nn.Module):
         assert all([i < len(ch_mult) for i in attn]), 'attn index out of bound'
         tdim = ch * 4
         self.time_embedding = TimeEmbedding(T, ch, tdim)
+        self.label_embedding = LabelEmbedding(10, ch, tdim)
 
         self.head = nn.Conv2d(1, ch, kernel_size=3, stride=1, padding=1)
         self.downblocks = nn.ModuleList()
@@ -206,32 +211,27 @@ class UNet(nn.Module):
             Swish(),
             nn.Conv2d(now_ch, 1, 3, stride=1, padding=1)
         )
-        self.initialize()
 
-    def initialize(self):
-        init.xavier_uniform_(self.head.weight)
-        init.zeros_(self.head.bias)
-        init.xavier_uniform_(self.tail[-1].weight, gain=1e-5)
-        init.zeros_(self.tail[-1].bias)
-
-    def forward(self, x, t):
+    def forward(self, x, t, y):
         # Timestep embedding
-        temb = self.time_embedding(t)#[batch_size 64]
+        temb = self.time_embedding(t)  # [batch_size 64]
+        yemb = self.label_embedding(y)  # [batch_size 64]
+
         # Downsampling
         h = self.head(x)
         hs = [h]
         for layer in self.downblocks:
-            h = layer(h, temb)
+            h = layer(h, temb, yemb)
             hs.append(h)
         # Middle
         for layer in self.middleblocks:
-            h = layer(h, temb)
+            h = layer(h, temb,yemb)
         # Upsampling
         for layer in self.upblocks:
             if isinstance(layer, ResBlock):
                 hpop = hs.pop()
                 h = torch.cat([h, hpop], dim=1)
-            h = layer(h, temb)
+            h = layer(h, temb,yemb)
         h = self.tail(h)
 
         assert len(hs) == 0
@@ -240,9 +240,9 @@ class UNet(nn.Module):
 
 if __name__ == '__main__':
     batch_size = 8
-    model = UNet(T=100, ch=16, ch_mult=[1, 2, 4], attn=[1],num_res_blocks=2, dropout=0.1)
-    x = torch.randn(batch_size, 1,28, 28)
-    t = torch.randint(100, (batch_size, ))
-    y = model(x, t)
+    model = UNet(T=100, ch=16, ch_mult=[1, 2, 4], attn=[1], num_res_blocks=2, dropout=0.1)
+    x = torch.randn(batch_size, 1, 28, 28)
+    t = torch.randint(100, (batch_size,))
+    y = torch.randint(10, (batch_size,))
+    y = model(x, t, y)
     print(y.shape)
-

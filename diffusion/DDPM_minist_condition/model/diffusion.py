@@ -43,25 +43,26 @@ class GaussianDiffusion(nn.Module):
         self.register_buffer("sigma", torch.sqrt(beta))
 
     @torch.no_grad()
-    def sample(self, x_t, t: int, sample_num=1):
+    def sample(self, x_t, t: int, sample_num=1,labels=None):
         times = torch.full((sample_num,), t, device=self.device, dtype=torch.long)  # times
         #########################################################################prediction
-        noise = self.model(x_t, times)
+        noise = self.model(x_t, times,labels)
         #########################################################################predict_start_from_noise
         remove_noise_coeff = self.remove_noise_coeff.gather(-1, times).reshape(sample_num, 1, 1, 1)
         reciprocal_sqrt_alpha = self.reciprocal_sqrt_alpha.gather(-1, times).reshape(sample_num, 1, 1, 1)
-        _x = reciprocal_sqrt_alpha * (x_t - remove_noise_coeff * noise)
+        x_pre = reciprocal_sqrt_alpha * (x_t - remove_noise_coeff * noise)
 
         sigma = self.sigma.gather(-1, times).reshape(sample_num, 1, 1, 1)
-        if t > 0: _x = _x + sigma * (torch.randn_like(_x).clamp_(min=-1, max=1))
-        return _x
+        if t > 0: x_pre = x_pre + sigma * (torch.randn_like(x_pre))
+        return x_pre
 
     @torch.no_grad()
-    def sample_loop(self, sample_num=16):
+    def sample_loop(self, sample_num=16,labels=None):
         shape = (sample_num, self.channels, self.image_size, self.image_size)
-        img = torch.randn(size=shape, device=self.device).clamp_(-1, 1)  # 随机噪声 均值为0 方差为1 但是范围不定
+        img = torch.randn(size=shape, device=self.device)  # 随机噪声 均值为0 方差为1 但是范围不定
         for t in tqdm(reversed(range(0, self.timesteps)), desc='sampling', total=self.timesteps):
-            img = self.sample(img, t, sample_num=sample_num)
+            img = self.sample(img, t, sample_num=sample_num,labels=labels)
+            img = torch.clamp_(img, min=-1, max=1)
         img = torch.clamp_(img, min=-1, max=1)
         img = (img + 1) * 0.5
         return img
@@ -72,13 +73,13 @@ class GaussianDiffusion(nn.Module):
         sqrt_one_minus_alpha_cumprod = self.sqrt_one_minus_alpha_cumprod.gather(-1, time_step).view(self.batch, 1, 1, 1)
         return sqrt_alpha_cumprod * x_0 + sqrt_one_minus_alpha_cumprod * noise
 
-    def forward(self, x_0,labels):
+    def forward(self, x_0,label):
         self.batch = x_0.shape[0]
         # 随机生成不同img的时间步
         time_step = torch.randint(0, self.timesteps, (self.batch,), device=self.device).long()
         noise = torch.randn_like(x_0)
 
         x_t = self.xt_sample(x_0=x_0, time_step=time_step, noise=noise)  # [b c h w]
-        t_noise = self.model(x_t, time_step)  # xt = x+noise ->[3, 3, 64, 64] 预测的是噪声
+        t_noise = self.model(x_t, time_step,label)  # xt = x+noise ->[3, 3, 64, 64] 预测的是噪声
         loss = self.criterion(t_noise, noise)
         return loss
