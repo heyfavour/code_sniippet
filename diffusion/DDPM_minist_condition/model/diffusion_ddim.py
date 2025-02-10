@@ -40,8 +40,8 @@ class GaussianDiffusion(nn.Module):
         self.register_buffer('sqrt_alpha_cumprod', torch.sqrt(alpha_cumprod))
         self.register_buffer('sqrt_one_minus_alpha_cumprod', torch.sqrt(1. - alpha_cumprod))
         ######################################################################
-        self.register_buffer('reciprocal_sqrt_alpha', torch.sqrt(1. / alpha))
-        self.register_buffer("remove_noise_coeff", beta / torch.sqrt(1 - alpha_cumprod))
+        self.register_buffer('reciprocal_sqrt_alpha_cumprod', torch.sqrt(1. / alpha_cumprod))
+        self.register_buffer("remove_noise_coeff", torch.sqrt(1 - alpha_cumprod)/torch.sqrt(alpha_cumprod))
         self.register_buffer("sigma", torch.sqrt(beta))
 
     @torch.no_grad()
@@ -50,19 +50,22 @@ class GaussianDiffusion(nn.Module):
         #########################################################################prediction
         noise = self.model(x_t, times, labels)
         #########################################################################predict_start_from_noise
-        remove_noise_coeff = self.remove_noise_coeff.gather(-1, times).reshape(sample_num, 1, 1, 1)
-        reciprocal_sqrt_alpha = self.reciprocal_sqrt_alpha.gather(-1, times).reshape(sample_num, 1, 1, 1)
-        x_pre = reciprocal_sqrt_alpha * (x_t - remove_noise_coeff * noise)
-        if t == 0: return x_pre  # 返回
-
-
-        alpha_cumprod = self.alpha_cumprod.gather(-1, times).reshape(sample_num, 1, 1, 1)
+        # x_0
+        reciprocal_sqrt_alpha_cumprod = self.reciprocal_sqrt_alpha_cumprod.gather(-1, times).reshape(sample_num, 1, 1, 1)
+        sqrt_one_minus_alpha_cumprod = self.sqrt_one_minus_alpha_cumprod.gather(-1, times).reshape(sample_num, 1, 1, 1)
+        x_0= reciprocal_sqrt_alpha_cumprod * (x_t - sqrt_one_minus_alpha_cumprod * noise)
+        if t == 0: return x_0  # 返回
+        # 第一项系数
+        sqrt_alpha_cumprod_prev = self.sqrt_alpha_cumprod.gather(-1, (times - 1).clamp(0)).reshape(sample_num, 1, 1, 1)
+        # 第二项系数
         alpha_cumprod_prev = self.alpha_cumprod.gather(-1, (times - 1).clamp(0)).reshape(sample_num, 1, 1, 1)
+        #
+        alpha_cumprod = self.alpha_cumprod.gather(-1, times).reshape(sample_num, 1, 1, 1)
         sigma = eta * torch.sqrt((1 - alpha_cumprod_prev) / (1 - alpha_cumprod)) * torch.sqrt(1 - alpha_cumprod / alpha_cumprod_prev)
         noise_term = sigma * torch.randn_like(x_t)  # 额外噪声
 
         # 计算 x_t-1
-        x_t_prev = torch.sqrt(alpha_cumprod_prev) * x_pre + torch.sqrt(1 - alpha_cumprod_prev - sigma**2) * noise + noise_term
+        x_t_prev = sqrt_alpha_cumprod_prev * x_0 + torch.sqrt(1 - alpha_cumprod_prev - sigma**2) * noise + noise_term
         return x_t_prev
 
         sigma = self.sigma.gather(-1, times).reshape(sample_num, 1, 1, 1)
