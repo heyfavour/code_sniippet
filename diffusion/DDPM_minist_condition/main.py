@@ -1,4 +1,5 @@
 import sys, os
+import math
 import time
 import random
 import numpy as np
@@ -11,6 +12,7 @@ from model.unet import UNet
 from model.diffusion import GaussianDiffusion
 from load_data import get_dataloader
 import torchvision
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 
 def set_seed(seed=1):
@@ -24,9 +26,9 @@ if __name__ == '__main__':
     set_seed(96)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    lr = 1e-4
+    lr = 1e-3
     batch_size = 256
-    train_steps = 200
+    train_steps = 1000
     unet = UNet(T=train_steps, ch=16, ch_mult=[1, 4, 8], attn=[2], num_res_blocks=2, dropout=0.15).to(device)
     diffusion = GaussianDiffusion(
         unet,
@@ -40,8 +42,10 @@ if __name__ == '__main__':
     ################################################################################################
     dataloader, info = get_dataloader(batch_size=batch_size)
     optimizer = AdamW(diffusion.parameters(), lr=lr)
+    batch_count = math.ceil(info['count']/ (batch_size))
+    scheduler = CosineAnnealingWarmRestarts(optimizer,T_0=batch_count, T_mult=2)
     ################################################################################################ train
-    epoch_num = 50
+    epoch_num = 127
     max_clip = 1.0
     scaler = amp.GradScaler()
     for epoch in range(epoch_num):
@@ -59,7 +63,7 @@ if __name__ == '__main__':
             # amp update
             scaler.step(optimizer)
             scaler.update()
-
+            scheduler.step()
             epoch_loss += loss.item()
             if idx % 50 == 0:
                 print(f"[IDX] {idx} [LOSS] {loss.item()}")

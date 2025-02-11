@@ -37,43 +37,34 @@ class GaussianDiffusion(nn.Module):
         self.register_buffer('beta', beta)
         self.register_buffer('alpha', alpha)
         self.register_buffer('alpha_cumprod', alpha_cumprod)
-        self.register_buffer('sqrt_alpha_cumprod', torch.sqrt(alpha_cumprod))
-        self.register_buffer('sqrt_one_minus_alpha_cumprod', torch.sqrt(1. - alpha_cumprod))
-        ######################################################################
-        self.register_buffer('reciprocal_sqrt_alpha_cumprod', torch.sqrt(1. / alpha_cumprod))
-        self.register_buffer("remove_noise_coeff", torch.sqrt(1 - alpha_cumprod)/torch.sqrt(alpha_cumprod))
-        self.register_buffer("sigma", torch.sqrt(beta))
+
 
     @torch.no_grad()
-    def sample(self, x_t, t: int, sample_num=1, labels=None,eta=0.0):
+    def sample(self, x_t, t: int, sample_num=1, labels=None, eta=0.0):
         times = torch.full((sample_num,), t, device=self.device, dtype=torch.long)  # times
         #########################################################################prediction
         noise = self.model(x_t, times, labels)
         #########################################################################predict_start_from_noise
-        # x_0
-        reciprocal_sqrt_alpha_cumprod = self.reciprocal_sqrt_alpha_cumprod.gather(-1, times).reshape(sample_num, 1, 1, 1)
-        sqrt_one_minus_alpha_cumprod = self.sqrt_one_minus_alpha_cumprod.gather(-1, times).reshape(sample_num, 1, 1, 1)
-        x_0= reciprocal_sqrt_alpha_cumprod * (x_t - sqrt_one_minus_alpha_cumprod * noise)
-        if t == 0: return x_0  # 返回
-        # 第一项系数
-        sqrt_alpha_cumprod_prev = self.sqrt_alpha_cumprod.gather(-1, (times - 1).clamp(0)).reshape(sample_num, 1, 1, 1)
-        # 第二项系数
+        alpha = self.alpha.gather(-1, (times - 1).clamp(0)).reshape(sample_num, 1, 1, 1)
         alpha_cumprod_prev = self.alpha_cumprod.gather(-1, (times - 1).clamp(0)).reshape(sample_num, 1, 1, 1)
-        #
         alpha_cumprod = self.alpha_cumprod.gather(-1, times).reshape(sample_num, 1, 1, 1)
-        sigma = eta * torch.sqrt((1 - alpha_cumprod_prev) / (1 - alpha_cumprod)) * torch.sqrt(1 - alpha_cumprod / alpha_cumprod_prev)
-        noise_term = sigma * torch.randn_like(x_t)  # 额外噪声
 
-        # 计算 x_t-1
-        x_t_prev = sqrt_alpha_cumprod_prev * x_0 + torch.sqrt(1 - alpha_cumprod_prev - sigma**2) * noise + noise_term
-        return x_t_prev
+        #
+        sigma = eta * torch.sqrt(
+            (1 - alpha_cumprod_prev) / (1 - alpha_cumprod) * (1 - alpha)
+        )
+        epsilon = torch.randn_like(x_t)
+        x_t_minus_one = (
+                torch.sqrt(alpha_cumprod_prev / alpha_cumprod) * x_t
+                + (torch.sqrt(1-alpha_cumprod_prev - sigma**2) - torch.sqrt(alpha_cumprod_prev*(1-alpha_cumprod)/alpha_cumprod))*noise
+                + sigma * epsilon
+        )
 
-        sigma = self.sigma.gather(-1, times).reshape(sample_num, 1, 1, 1)
-        x_pre = x_pre + sigma * (torch.randn_like(x_pre))
-        return x_pre
+        return x_t_minus_one
+
 
     @torch.no_grad()
-    def sample_loop(self, sample_num=16, labels=None, ddim_steps=200, eta=0.0):
+    def sample_loop(self, sample_num=16, labels=None, ddim_steps=500, eta=0.5):
         shape = (sample_num, self.channels, self.image_size, self.image_size)
         img = torch.randn(size=shape, device=self.device)  # 随机噪声 均值为0 方差为1 但是范围不定
         times = torch.linspace(self.timesteps - 1, 0, ddim_steps, device=self.device).long()  # [200]
@@ -97,10 +88,10 @@ if __name__ == '__main__':
         batch=256,
         device=device,
     )
-    # diffusion.load_state_dict(torch.load("./../model.pth"))
+    diffusion.load_state_dict(torch.load("./../model.pth"),strict=False)
     diffusion = diffusion.to(device)
     diffusion.eval()
     images = diffusion.sample_loop(10, torch.arange(10).to(device))
-    # os.makedirs(f"../results/ddim/", exist_ok=True)
-    # for i in range(10):
-    #     torchvision.utils.save_image(images[i], f'./results/ddim/{i}.jpg')
+    os.makedirs(f"../results/ddim/", exist_ok=True)
+    for i in range(10):
+        torchvision.utils.save_image(images[i], f'../results/ddim/{i}.jpg')
