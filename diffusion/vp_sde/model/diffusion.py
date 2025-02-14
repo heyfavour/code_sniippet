@@ -54,6 +54,7 @@ class GaussianDiffusion(nn.Module):
         noise = torch.randn_like(x_0)
         mean, std = self.sde.marginal_prob(x_0, t)
         x_t = mean + std * noise
+        #score_fn 此处其实就是score_fn * std
         score = self.model(x_t, t * 999, label)
         # loss = torch.mean(torch.mean(torch.square(z - score).view(self.batch, -1), dim=-1))
         loss = self.criterion(noise, score)
