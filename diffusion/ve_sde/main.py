@@ -4,14 +4,14 @@ import time
 import random
 import numpy as np
 import torch
+import torchvision
 
 from torch.optim import AdamW
 
 from model.unet import UNet
-from model.sde import VPSDE
+from model.sde import VESDE
 from model.diffusion import GaussianDiffusion
 from load_data import get_dataloader
-import torchvision
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 
@@ -26,10 +26,10 @@ if __name__ == '__main__':
     set_seed(96)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    lr = 2e-4
+    lr = 1e-3
     batch_size = 256
     unet = UNet(ch=16, ch_mult=[1, 2, 4], attn=[2], num_res_blocks=2, dropout=0.15).to(device)
-    sde = VPSDE(beta_min=0.1,beta_max=20,N=1000)
+    sde = VESDE(sigma_min=0.01,sigma_max=50,N=1000,device=device)
     diffusion = GaussianDiffusion(
         unet,
         sde=sde,

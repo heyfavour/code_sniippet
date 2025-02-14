@@ -34,79 +34,62 @@ class AbstractSDE(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def scale_start_to_noise(self, t):
-        """Compute the scale of conversion
-        from the original image estimation loss, i.e, || x_0 - x_0_pred ||
-        to the noise prediction loss, i.e, || e - e_pred ||.
-        Denoting the output of this function by C,
-        C * || x_0 - x_0_pred || = || e - e_pred || holds.
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
     def score_fn(self, model, x_t, t, y):
         raise NotImplementedError
 
-    # @abc.abstractmethod
-    # def proposal_distribution(self):
-    #     raise NotImplementedError
 
-    def reverse(self, model, x_t, t, y):
-        score = self.score_fn(model, x_t, t, y)
-        drift, diffusion = self.sde(x_t, t)
-        drift = drift - diffusion ** 2 * score
-        return drift, diffusion
-
-
-class VPSDE(AbstractSDE):
-    def __init__(self, beta_min=0.1, beta_max=20, N=1000):
+class VESDE(AbstractSDE):
+    def __init__(self, sigma_min=0.01, sigma_max=50, N=1000,device=None):
         super().__init__()
-        self.beta_0 = beta_min
-        self.beta_1 = beta_max
+        self.sigma_min = sigma_min
+        self.sigma_max = sigma_max
         self.N = N
-        self.beta = torch.linspace(beta_min / N, beta_max / N, N)
-        self.alpha = 1. - self.beta
-
-        self.alpha_cumprod = torch.cumprod(self.alpha, dim=0)
-        self.sqrt_alpha_cumprod = torch.sqrt(self.alpha_cumprod)
-        self.sqrt_one_minus_alpha_cumprod = torch.sqrt(1. - self.alpha_cumprod)
+        self.sigma = torch.exp(torch.linspace(np.log(self.sigma_min), np.log(self.sigma_max), N)).to(device)
 
     @property
     def T(self):
         return 1
 
-    def sde(self, x_t, t):
-        beta_t = (self.beta_0 + t * (self.beta_1 - self.beta_0))[:, None, None, None]
-        drift = -0.5 * beta_t * x_t
-        diffusion = torch.sqrt(beta_t)
-        return drift, diffusion
-
-    def marginal_prob(self, x_0, t):
-        # coeff = (-0.25 * t ^2 * (20-0.05) - 1/2 * t * 0.05)
-        log_mean_coeff = (-0.25 * t ** 2 * (self.beta_1 - self.beta_0) - 0.5 * t * self.beta_0)[:, None, None, None]
-        mean = torch.exp(log_mean_coeff) * x_0
-        std = torch.sqrt(1. - torch.exp(2. * log_mean_coeff))
+    def marginal_prob(self, x, t):
+        std = (self.sigma_min * (self.sigma_max / self.sigma_min) ** t)[:, None, None, None]
+        mean = x
         return mean, std
 
     def score_fn(self, model, x_t, t, y):
-        score = model(x_t, t * 999, y)
-        std = torch.sqrt(
-            1. - torch.exp(2. * -0.25 * t ** 2 * (self.beta_1 - self.beta_0) - 0.5 * t * self.beta_0)
-        )[:, None, None, None]
-        score = - score / std
+        t = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
+        score = model(x_t, t, y)
         return score
+
+    def sde(self, x, t):
+        sigma = self.sigma_min * (self.sigma_max / self.sigma_min) ** t
+        drift = torch.zeros_like(x)
+        diffusion = sigma * torch.sqrt(
+            torch.tensor(2 * (np.log(self.sigma_max) - np.log(self.sigma_min)), device=t.device)
+        )
+        return drift, diffusion
+    #
+    def prior_sampling(self, shape):
+        return torch.randn(*shape) * self.sigma_max
 
     def prior_logp(self, z):
         shape = z.shape
         N = np.prod(shape[1:])
-        logps = - N / 2. * np.log(2 * np.pi) - torch.sum(z ** 2, dim=(1, 2, 3)) / 2.
-        return logps
+        return -N / 2. * np.log(2 * np.pi * self.sigma_max ** 2) - torch.sum(z ** 2, dim=(1, 2, 3)) / (
+                2 * self.sigma_max ** 2)
 
-    def scale_start_to_noise(self, t):
-        log_mean_coeff = (
-                                 -0.25 * t ** 2 * (self.beta_1 - self.beta_0) - 0.5 * t * self.beta_0
-                         )[:, None, None, None]
-        marginal_coeff = torch.exp(log_mean_coeff)
-        marginal_std = torch.sqrt(1. - torch.exp(2. * log_mean_coeff))
-        scale = marginal_coeff / (marginal_std + 1e-12)
-        return scale
+    def discretize(self, x, t):
+        timestep = (t * (self.N - 1) / self.T).long()
+        sigma = self.sigma.to(t.device)[timestep]
+        adjacent_sigma = torch.where(
+            timestep == 0, torch.zeros_like(t), self.sigma[timestep - 1].to(t.device)
+        )
+        f = torch.zeros_like(x)
+        G = torch.sqrt(sigma ** 2 - adjacent_sigma ** 2)[:, None, None, None]#[b]->[b,1,1,1]
+        return f, G
+
+    def reverse(self, model, x, t, y):
+        """Create discretized iteration rules for the reverse diffusion sampler."""
+        f, G = self.discretize(x, t)
+        rev_f = f - G ** 2 * self.score_fn(model, x, t, y)
+        rev_G = G
+        return rev_f, rev_G
