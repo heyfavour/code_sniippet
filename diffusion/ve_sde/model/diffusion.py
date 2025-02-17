@@ -54,8 +54,8 @@ class LangevinCorrector(Corrector):
         for i in range(self.n_steps):
             grad = self.sde.score_fn(model, x, t, y)  # [b ,c,h,w]
             noise = torch.randn_like(x)
-            grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean(dim=-1)
-            noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean(dim=-1)
+            grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), dim=-1).mean()
+            noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
             step_size = (self.snr * noise_norm / grad_norm) ** 2 * 2 * alpha
             x_mean = x + step_size[:, None, None, None] * grad
             x = x_mean + torch.sqrt(step_size * 2)[:, None, None, None] * noise
@@ -87,13 +87,14 @@ class GaussianDiffusion(nn.Module):
         # score_fn*std
         score = self.sde.score_fn(self.model, x_t, t, y=label) * std
 
-        loss = torch.mean(torch.sum(torch.square(score + noise).view(self.batch, -1), dim=-1))
+        #loss = torch.mean(torch.sum(torch.square(score + noise).view(self.batch, -1), dim=-1))
+        loss = self.criterion(score,noise)
         return loss
 
     @torch.no_grad()
     def sample(self, sample_num=16, labels=None):
         shape = (sample_num, self.channels, self.image_size, self.image_size)
-        x = torch.randn(size=shape, device=self.device)  # 随机噪声 均值为0 方差为1 但是范围不定
+        x = self.sde.prior_sampling(shape).to(self.device)
         timesteps = torch.linspace(self.sde.T, self.eps, self.sde.N, device=self.device)
         for i in tqdm(range(self.sde.N), desc="sample"):  # 1000
             t = timesteps[i]
