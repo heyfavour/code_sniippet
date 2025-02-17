@@ -101,9 +101,8 @@ class GaussianDiffusion(nn.Module):
         self.device = device
         self.eps = eps
         self.criterion = torch.nn.MSELoss().to(device)
-        self.predictor = EulerMaruyamaPredictor(self.sde)
-        # self.corrector = LangevinCorrector(self.sde, 0.16, 1)
-        # self.corrector = AnnealedLangevinDynamics(self.sde, 0.37, 1)
+        self.predictor = ReverseDiffusionPredictor(self.sde)
+        self.corrector = LangevinCorrector(self.sde, 0.16, 1)
 
     def forward(self, x_0, label):
         self.batch = x_0.shape[0]
@@ -128,7 +127,7 @@ class GaussianDiffusion(nn.Module):
         for i in tqdm(range(self.sde.N), desc="sample"):  # 1000
             t = timesteps[i]
             vec_t = torch.ones(sample_num, device=t.device) * t
-            # x, x_mean = self.corrector.update_fn(self.model, x, t=vec_t, y=labels)
+            x, x_mean = self.corrector.update_fn(self.model, x, t=vec_t, y=labels)
             x, x_mean = self.predictor.update_fn(self.model, x, t=vec_t, y=labels)
 
         img = torch.clamp_(x_mean, min=-1, max=1)

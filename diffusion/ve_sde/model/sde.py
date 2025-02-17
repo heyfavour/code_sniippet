@@ -45,7 +45,7 @@ class VESDE(AbstractSDE, torch.nn.Module):
         self.sigma_max = sigma_max
         self.N = N
         sigmas = torch.exp(torch.linspace(np.log(self.sigma_min), np.log(self.sigma_max), N))
-        sigma = torch.tensor(self.sigma_min * (self.sigma_max / self.sigma_min))
+        sigma = self.sigma_min * (self.sigma_max / self.sigma_min)
         sqrt_delta_sima = torch.sqrt(torch.tensor(2 * (np.log(self.sigma_max) - np.log(self.sigma_min))))
         self.register_buffer("sigmas",sigmas)
         self.register_buffer("sigma",sigma)

@@ -211,6 +211,7 @@ class UNet(nn.Module):
 
     def forward(self, x, t, y):
         # Timestep embedding
+        t = t*1000
         temb = self.time_embedding(t)  # [batch_size 64]
         yemb = self.label_embedding(y)  # [batch_size 64]
 

@@ -26,6 +26,7 @@ if __name__ == '__main__':
     set_seed(96)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    lr = 2e-4
     batch_size = 256
     unet = UNet(ch=16, ch_mult=[1, 4, 8], attn=[2], num_res_blocks=2, dropout=0.15).to(device)
     sde = VESDE(sigma_min=0.01, sigma_max=50, N=1000).to(device)

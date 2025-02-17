@@ -28,8 +28,8 @@ if __name__ == '__main__':
 
     lr = 2e-4
     batch_size = 256
-    unet = UNet(ch=16, ch_mult=[1, 4, 8], attn=[2], num_res_blocks=2, dropout=0.15).to(device)
-    sde = VESDE(sigma_min=0.01, sigma_max=20, N=1000).to(device)
+    unet = UNet(ch=16, ch_mult=[1, 2, 4], attn=[2], num_res_blocks=2, dropout=0.15).to(device)
+    sde = VESDE(sigma_min=0.01, sigma_max=1, N=1000).to(device)
     diffusion = GaussianDiffusion(
         unet,
         sde=sde,
@@ -45,8 +45,8 @@ if __name__ == '__main__':
     batch_count = math.ceil(info['count'] / (batch_size))
     scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=batch_count, T_mult=2)
     ################################################################################################ train
-    epoch_num = 32
-    max_clip = 1.0
+    epoch_num = 64
+    #max_clip = 1.0
     for epoch in range(epoch_num):
         epoch_loss = 0
         diffusion.train()
@@ -56,7 +56,7 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             loss = diffusion(data, label)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(diffusion.parameters(), max_clip)
+            #torch.nn.utils.clip_grad_norm_(diffusion.parameters(), max_clip)
             optimizer.step()
             scheduler.step()
             epoch_loss += loss.item()
