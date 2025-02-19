@@ -27,8 +27,8 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     batch_size = 256
-    unet = UNet(ch=16, ch_mult=[1, 4, 8], attn=[2], num_res_blocks=2, dropout=0.15).to(device)
-    sde = VESDE(sigma_min=0.01, sigma_max=50, N=1000).to(device)
+    unet = UNet(ch=16, ch_mult=[1, 2, 4], attn=[2], num_res_blocks=2, dropout=0.15).to(device)
+    sde = VESDE(sigma_min=0.01, sigma_max=5, N=1000).to(device)
     diffusion = GaussianDiffusion(
         unet,
         sde=sde,
@@ -38,12 +38,7 @@ if __name__ == '__main__':
     diffusion.load_state_dict(torch.load("./model.pth",weights_only=True))
     diffusion = diffusion.to(device)
     print("参数总量:", sum(p.numel() for p in diffusion.parameters()))
-    ################################################################################################
-    dataloader, info = get_dataloader(batch_size=batch_size)
-    optimizer = AdamW(diffusion.parameters(), lr=lr)
-    batch_count = math.ceil(info['count'] / (batch_size))
-    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=batch_count, T_mult=2)
-    ################################################################################################ train
+    ################################################################################################ sample
     diffusion.to(device)
     diffusion.eval()
     images = diffusion.sample(10, labels=torch.arange(10).to(device))
