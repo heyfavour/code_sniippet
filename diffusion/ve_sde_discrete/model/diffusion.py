@@ -119,7 +119,7 @@ class GaussianDiffusion(nn.Module):
     def sample(self, sample_num=16, labels=None):
         shape = (sample_num, self.channels, self.image_size, self.image_size)
         x = self.sde.prior_sampling(shape).to(self.device)
-        timesteps = torch.linspace(self.sde.T, 1e-5, self.sde.N, device=self.device)
+        timesteps = torch.linspace(self.sde.T, self.eps, self.sde.N, device=self.device)
         # timestep 越小噪声越小
         for i in range(self.sde.N):
             t = timesteps[i]
