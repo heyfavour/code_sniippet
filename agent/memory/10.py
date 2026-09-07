@@ -1,5 +1,4 @@
 # reAct
-from typing import Literal
 from langchain_deepseek import ChatDeepSeek
 from langchain_core.tools import tool
 
@@ -25,7 +24,7 @@ model = ChatDeepSeek(
     api_key=settings.deepseek_apikey.get_secret_value(),
     base_url="https://api.deepseek.com"
 )
-bound_model = model.build_tools(tools)
+bound_model = model.bind_tools(tools)
 
 def should_continue(state:MessagesState):
     last_message = state["messages"][-1]
@@ -40,17 +39,18 @@ def call_model(state:MessagesState):
 
 workflow = StateGraph(MessagesState)
 
-workflow.node("agent",call_model)
-workflow.node("action",tool_node)
+workflow.add_node("agent",call_model)
+workflow.add_node("action",tool_node)
 
 workflow.add_edge(START,"agent")
-workflow.add_conditional_edges("agent","action",should_continue,["action","END"])
+workflow.add_conditional_edges("agent",should_continue,["action",END])
 workflow.add_edge("action","agent")
 
 app = workflow.compile(checkpointer=memory)
 
 
-fronm
+# http://192.168.31.166:27017/
+# pip install pymongo langgrapgh langgraph-checkpoint-mongodb
 app.invoke([
     {"role":"user","content":"北京天气如何"},
     {"role":"assistant","content":"请调用search函数"},
